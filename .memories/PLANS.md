@@ -22,7 +22,7 @@
 
 ---
 
-## Ф0. Фундамент `[WIP]`
+## Ф0. Фундамент `[WIP]` — всё, кроме ветки по умолчанию и CI форка
 
 Цель: свой репозиторий, рабочая сборка, понимание кода на практике.
 
@@ -30,14 +30,17 @@
 |---|---|---|
 | Ф0.1 | Форк https://github.com/Aver005/Cutless, `main` — зеркало, `develop` запушена. Осталось: Settings → Default branch = `develop` | `[WIP]` владелец |
 | Ф0.2 | Remotes: `upstream` = jub0t/concat (пуш выключен), `origin` = Aver005/Cutless, ветка `develop` | `[DONE]` |
-| Ф0.3 | Собрать на Windows. Зависимости — `scripts/cutless/win-deps.sh` (FFmpeg, LLVM, ONNX Runtime, sherpa в `vendor/`), окружение — `vendor/env.sh`. Грабли — в `LEARNINGS.md` | `[WIP]` |
-| Ф0.4 | Прогнать гейт: `fmt`, `clippy -D warnings`, `cargo test`. Число тестов и время — в `STATE.md` | `[TODO]` |
-| Ф0.5 | Руками через `concat-cli api` пройти цепочку из пяти вызовов: `project.create`, `media.import`, `edit.apply` (`splitClips`, `addTextClip`), `preview.frame`, `export.run`. Сохранить запросы как сценарий `scripts/cutless/api-smoke.jsonl` | `[TODO]` |
+| Ф0.3 | Собрать на Windows. Зависимости — `scripts/cutless/win-deps.sh` (FFmpeg, LLVM, ONNX Runtime, sherpa в `vendor/`), окружение — `vendor/env.sh`. Сборка окна — 10 мин 23 с с нуля | `[DONE]` |
+| Ф0.4 | Гейт: `fmt` и `clippy -D warnings` чистые, `cargo test` — 636 + 91 зелёных, 1 падение апстрима (`vn.json`) и 1 скрытый дефект ORT (`BUGS.md`) | `[DONE]` |
+| Ф0.5 | Сквозной сценарий API — `scripts/cutless/api-smoke.py`: проект 9:16, импорт, клип, разрез, титр, undo/redo, кадр, экспорт MP4. 10 шагов за 5 с | `[DONE]` |
 | Ф0.6 | Pre-commit hook `.githooks/pre-commit`: fmt + clippy при правках `src/`, `locales.py`/`models.py` при правках строк и моделей. Включён через `core.hooksPath` | `[DONE]` |
-| Ф0.7 | Первый коммит в `develop`: `.memories/`, `CLAUDE.md`, `.gitignore` (`.trae/` в git не идёт) | `[WIP]` |
+| Ф0.7 | Первые коммиты в `develop`: база знаний, скрипты, хук | `[DONE]` |
 | Ф0.8 | Включить в форке только `ci.yml`. `release.yml` и `models.yml` — после Ф1 | `[TODO]` |
 
 **Готово, когда:** окно запускается через `cargo dev`, гейт зелёный, сценарий Ф0.5 даёт mp4.
+Состояние на 2026-10-16: сборка, гейт и сценарий — да; окно собрано, но владелец его ещё не запускал.
+
+**Первый PR в апстрим (→ апстрим):** починить `every_locale_file_ships_and_each_once` — лишний `vn.json` (`BUGS.md`).
 
 ## Ф1. Идентичность Cutless `[TODO]`
 

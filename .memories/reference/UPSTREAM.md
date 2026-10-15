@@ -94,6 +94,8 @@ cd src && cargo fmt --check && cargo clippy --all-targets -- -D warnings && carg
 
 | Что | Почему апстрим примет |
 |---|---|
+| Убрать лишний `vn.json` (или внести в `BUILT_IN`) | Чинит красный CI `main`: `every_locale_file_ships_and_each_once` (`BUGS.md`) |
+| Две сессии ONNX в одном процессе | Падение, которое nextest прячет (`BUGS.md`); сначала воспроизвести в окне |
 | MCP-транспорт над `concat-api` | Обещан в их README, место оставлено в `concat-api/src/lib.rs` |
 | Глаголы `captions.*`, `transcript.get`, `speech.*` в API | Сейчас доступны только из окна |
 | `accessible-label` на контролах | Доступность, в их §15 это известная дыра |
