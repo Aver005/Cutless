@@ -21,7 +21,7 @@ locale is a JSON file that maps each key to your language:
   Language list shows, so someone who cannot read the current language can
   still find their own.
 - Every other key is one of those in
-  [`src/crates/concat/locales/en.json`](src/crates/concat/locales/en.json),
+  [`src/crates/concat/locales/en.json`](../src/crates/concat/locales/en.json),
   the complete inventory, which holds the English for each. Copy that file,
   keep the keys, replace the values.
 - A key is dotted lowerCamelCase: the part of the interface the string

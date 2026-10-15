@@ -19,7 +19,7 @@ name = "concat"
 path = "src/main.rs"
 
 # Slint is taken under its GPL-3.0-only option to sit beside the AGPL engine.
-# See ../../../THIRD_PARTY_NOTICES.md for why those two combine legally.
+# See ../../../docs/THIRD_PARTY_NOTICES.md for why those two combine legally.
 #
 # default-features is off because `renderer-femtovg` (the OpenGL path) is a
 # default. Enabling both compiles glutin and the whole GL renderer for

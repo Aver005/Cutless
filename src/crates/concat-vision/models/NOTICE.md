@@ -1,14 +1,14 @@
 # The compiled-in cutout model
 
-The downloaded models are listed in THIRD_PARTY_NOTICES.md at the
-repository root and named in `src/models.rs`.
+The downloaded models are listed in docs/THIRD_PARTY_NOTICES.md and
+named in `src/models.rs`.
 
 `selfie-segmentation.onnx` is Google's MediaPipe Selfie Segmentation model
 (the general, 256 × 256 variant), converted to ONNX and published by the
 ONNX Community at
 <https://huggingface.co/onnx-community/mediapipe_selfie_segmentation>.
 Both the model and the conversion are licensed under the Apache License,
-Version 2.0; see THIRD_PARTY_NOTICES.md at the repository root.
+Version 2.0; see docs/THIRD_PARTY_NOTICES.md.
 
 The file is compiled into `concat-vision` with `include_bytes!`, so a
 cutout needs no download and works the same on a desk and on a phone. The

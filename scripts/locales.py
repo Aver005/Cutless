@@ -4,8 +4,8 @@
     scripts/locales.py            # bring locales/en.json up to date with the
                                   # source, and drop lines no source asks for
     scripts/locales.py --check    # report what each locale lacks; exit 1 on
-                                  # anything out of step, and on a language
-                                  # the app and the READMEs do not both have
+                                  # anything out of step, and on locale
+                                  # files and BUILT_IN that disagree
     scripts/locales.py --check --same
                                   # also list each line still in English
     scripts/locales.py --check --strict
@@ -28,13 +28,11 @@ so this script writes those lines of en.json itself:
     effects.labels.<label>                a knob's label
     presets.<name>                        a text preset's name
 
-en.json is the inventory a translator starts from; see TRANSLATING.md.
+en.json is the inventory a translator starts from; see docs/TRANSLATING.md.
 
-The app speaks the languages the READMEs are written in, one for one:
-every `locales/<code>.json` is compiled in through `BUILT_IN` in
-src/crates/concat/src/i18n.rs and has a `docs/README.<code>.md` (English's
-is README.md), and every README has its locale. `--check` fails on a
-language one side has and the other does not.
+Every `locales/<code>.json` is compiled in through `BUILT_IN` in
+src/crates/concat/src/i18n.rs, and every code there has its file.
+`--check` fails on a language one side has and the other does not.
 """
 import json
 import pathlib
@@ -57,7 +55,6 @@ CRATE = ROOT / "src" / "crates" / "concat"
 LOCALES = CRATE / "locales"
 PACKAGES = ROOT / "src" / "crates" / "concat-effects" / "packages"
 I18N = CRATE / "src" / "i18n.rs"
-DOCS = ROOT / "docs"
 
 # A Rust or Slint string literal, with its escapes.
 LITERAL = r'"((?:[^"\\]|\\.)*)"'
@@ -193,28 +190,19 @@ def inventory() -> tuple[dict[str, str], list[str]]:
 
 
 def parity() -> list[str]:
-    """Where the app's languages and the READMEs' part: a locale file the
-    app does not compile in, a code compiled in with no file, a locale
-    with no README, a README with no locale."""
+    """Where the locale files and BUILT_IN part: a locale file the app
+    does not compile in, a code compiled in with no file."""
     files = {path.stem for path in LOCALES.glob("*.json")}
     built_in: set[str] = set()
     for code, file in BUILT_IN_ENTRY.findall(I18N.read_text(encoding="utf-8")):
         built_in.add(code)
         if code != file:
             files.add(f"{code} (BUILT_IN reads {file}.json)")
-    readmes = {path.name.removeprefix("README.").removesuffix(".md")
-               for path in DOCS.glob("README.*.md")}
-    if (ROOT / "README.md").exists():
-        readmes.add("en")
     out = []
     out += [f"locales/{code}.json is not in BUILT_IN in src/crates/concat/src/i18n.rs"
             for code in sorted(files - built_in)]
     out += [f"BUILT_IN lists {code}, which has no locales/{code}.json"
             for code in sorted(built_in - files)]
-    out += [f"locales/{code}.json has no docs/README.{code}.md"
-            for code in sorted((files | built_in) - readmes)]
-    out += [f"docs/README.{code}.md has no locales/{code}.json"
-            for code in sorted(readmes - files)]
     return out
 
 
@@ -277,8 +265,8 @@ def main() -> int:
             return 1
         failed = 1 if problems else check(wanted, "--same" in sys.argv, "--strict" in sys.argv)
         if apart:
-            print(f"languages: the app and the READMEs part on {len(apart)}; "
-                  "every locale has a README and every README a locale")
+            print(f"languages: the locale files and BUILT_IN part on {len(apart)}; "
+                  "every locale file is listed and every listed code has a file")
         return 1 if apart else failed
     write(LOCALES / "en.json", {"_": {"name": "English"}, **wanted})
     print(f"{len(wanted)} strings in {LOCALES / 'en.json'}")

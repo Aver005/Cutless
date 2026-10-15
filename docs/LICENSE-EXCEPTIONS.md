@@ -1,7 +1,7 @@
 # Concat licensing exceptions
 
 Concat is licensed under the **GNU Affero General Public License, version 3 or
-later** (AGPL-3.0-or-later). The full text is in [`LICENSE`](LICENSE).
+later** (AGPL-3.0-or-later). The full text is in [`LICENSE`](../LICENSE).
 
 The additional permission below is granted by the copyright holders on top of
 that license. It grants rights; it never takes any away. If you ignore this
@@ -56,7 +56,7 @@ This exception applies only while all of the following hold.
    the AGPL by describing it as a plugin, a host, a runtime, or a bundled
    dependency of an Independent Module.
 4. **Trademarks are separate.** This exception grants no rights in the Concat
-   name or logo. See [`TRADEMARK.md`](TRADEMARK.md).
+   name or logo. See [`TRADEMARK.md`](upstream/TRADEMARK.md).
 
 ### Notes
 

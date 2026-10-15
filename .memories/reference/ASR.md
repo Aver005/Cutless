@@ -60,7 +60,7 @@ RNNT у Nemotron, seq2seq у Whisper, CTC у GigaAM, плюс свой токе�
 5. Длинное аудио резать по VAD (Silero есть в `sherpa_onnx::vad`).
 
 Риски:
-- лицензии моделей — атрибуция в `THIRD_PARTY_NOTICES.md`;
+- лицензии моделей — атрибуция в `docs/THIRD_PARTY_NOTICES.md`;
 - размер моделей;
 - проверка `models.py --check` при добавлении в манифест;
 - расхождение с апстримом из-за замены `whisper-rs`.

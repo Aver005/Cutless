@@ -36,7 +36,7 @@
 //!
 //! Each face's release and the SHA-256 of its zip are on its constant
 //! below; the licence is `fonts/LICENSE-<face>.txt`, and
-//! THIRD_PARTY_NOTICES.md lists them.
+//! docs/THIRD_PARTY_NOTICES.md lists them.
 
 use std::sync::Arc;
 

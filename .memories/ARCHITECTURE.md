@@ -1,7 +1,7 @@
 # ARCHITECTURE
 > Как Cutless ложится на Concat. Last updated: 2026-10-16 (кода Cutless ещё нет; описана целевая схема).
 
-Архитектура самого Concat — в `ARCHITECTURE.md` и `src/README.md` в корне. Это документы апстрима,
+Архитектура самого Concat — в `docs/ARCHITECTURE.md` и `src/README.md`. Это документы апстрима,
 они подробные и актуальные. Здесь — только то, что нужно знать, чтобы строить Cutless поверх них.
 
 ## Concat в пяти фактах

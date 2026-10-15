@@ -137,7 +137,7 @@ jobs:
         working-directory: src
       # Every string the interface shows is a key in a locale file; this
       # keeps en.json the inventory of them and every shipped language
-      # keyed off it. See TRANSLATING.md.
+      # keyed off it. See docs/TRANSLATING.md.
       - run: python3 scripts/locales.py --check
       # The models Concat downloads are mirrored onto a release of this
       # repository; models/manifest.toml is what fills that mirror and the

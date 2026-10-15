@@ -123,7 +123,7 @@ lint: 1 warning — c7 text 24 chars/2.8s = 8.6 cps ok; c2 outside safe zone? no
   (время, размер, путь к файлу). MCP-клиент pooprusteek сводит картинку к `[Image: mime]`.
 - Проверять с двумя клиентами: Claude Code (есть зрение) и pooprusteek на DeepSeek Web (зрения нет).
 - Проблемы безопасности сервера апстрима (утечка fd, подключения до авторизации, §15 в их
-  `ARCHITECTURE.md`) для stdio не критичны, для HTTP — закрыть до релиза.
+  `docs/ARCHITECTURE.md`) для stdio не критичны, для HTTP — закрыть до релиза.
 
 ## 5. Мост к окну (Ф3)
 

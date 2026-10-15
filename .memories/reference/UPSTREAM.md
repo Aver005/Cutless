@@ -15,7 +15,7 @@ PR в чужой репозиторий открывается только из
 2. Owner — `Aver005`, **Repository name — `Cutless`** (сделано 2026-10-16).
 3. Галку **«Copy the main branch only» поставить**: чужие ветки не нужны.
 4. **Create fork.** Репозиторий будет публичным с подписью «forked from jub0t/concat». Это честно и
-   нужно по `TRADEMARK.md`.
+   нужно по `docs/upstream/TRADEMARK.md`.
 5. **Settings → Actions:** у форков Actions по умолчанию выключены, включать осознанно. Workflow
    апстрима (`release.yml`, `models.yml`) завязаны на чужие секреты и зеркало моделей — до фазы 1
    их не запускать (`reference/REBRAND.md`).
@@ -59,7 +59,7 @@ cd src && cargo fmt --check && cargo clippy --all-targets -- -D warnings && carg
 
 ## Как отправить PR в апстрим
 
-1. Перед крупной работой — issue или Discord апстрима: так требует их `CONTRIBUTING.md`.
+1. Перед крупной работой — issue или Discord апстрима: так требует их `.github/CONTRIBUTING.md`.
 2. Ветка от свежего апстрима:
    ```
    git fetch upstream
@@ -100,5 +100,5 @@ cd src && cargo fmt --check && cargo clippy --all-targets -- -D warnings && carg
 | Глаголы `captions.*`, `transcript.get`, `speech.*` в API | Сейчас доступны только из окна |
 | `accessible-label` на контролах | Доступность, в их §15 это известная дыра |
 | Импорт и экспорт SRT | Частый запрос, в коде нет |
-| Настраиваемая идентичность для форков | Их `TRADEMARK.md` требует от форков переименования |
+| Настраиваемая идентичность для форков | Их `docs/upstream/TRADEMARK.md` требует от форков переименования |
 | Адресация эффектов по id и проверка `revision` | Чинит гонки при внешних правках |

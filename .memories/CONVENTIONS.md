@@ -19,7 +19,7 @@
 
 ## Код
 
-**Унаследовано от апстрима** (`CONTRIBUTING.md`, `src/README.md`), действует везде:
+**Унаследовано от апстрима** (`.github/CONTRIBUTING.md`, `src/README.md`), действует везде:
 - Rust 2024, `rustfmt` с `max_width = 100`, `clippy -D warnings`, `missing_docs = "warn"`.
 - Логи — только `log::info!/warn!/error!`, не stdout. Уровень — `CONCAT_LOG=debug`.
 - Ссылки внутри графов — handles в арене, а не указатели. Generics неглубокие.
@@ -84,7 +84,7 @@ feat(mcp): 🤖 Add stdio MCP server over the editor API
 ## Коммиты для PR в апстрим
 
 Ветки `up/*` пишутся в стиле апстрима: `feat(api): an MCP transport over the API`. Без эмодзи и без
-тела Keep a Changelog. **Каждый коммит с `-s`** (`Signed-off-by` по их `CLA.md`). Подробно —
+тела Keep a Changelog. **Каждый коммит с `-s`** (`Signed-off-by` по их `docs/upstream/CLA.md`). Подробно —
 `reference/UPSTREAM.md`.
 
 ## Ветки

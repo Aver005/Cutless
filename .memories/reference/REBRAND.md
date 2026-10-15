@@ -1,7 +1,7 @@
 # REBRAND — где зашит Concat
 > Чек-лист фазы 1 (`PLANS.md`). Собран grep'ом по апстриму `v0.2.7-21-gef49577`. Last updated: 2026-10-16.
 
-Цель: сборку Cutless можно распространять, не нарушая `TRADEMARK.md`. Она ставится рядом с Concat
+Цель: сборку Cutless можно распространять, не нарушая `docs/upstream/TRADEMARK.md`. Она ставится рядом с Concat
 и не делит с ним данные. При этом в файлах апстрима меняется **как можно меньше строк**
 (`reference/UPSTREAM.md`).
 
@@ -53,7 +53,7 @@
 | `scripts/ci/smoke-android.sh`, `scripts/ci/smoke-*.sh` | Идентификатор и имя приложения |
 | `scripts/models.py:39` | `REPO = "jub0t/Concat"` |
 | `flake.nix` | `homepage`, имя пакета |
-| `CODE_SIGNING.md` | Команда и роли апстрима — заменить своими или убрать из сборок Cutless |
+| `docs/upstream/CODE_SIGNING.md` | Команда и роли апстрима — заменить своими или убрать из сборок Cutless |
 
 ## Ассеты
 
@@ -65,11 +65,9 @@
 
 ## Документация
 
-- `README.md` и 25 переводов в `docs/README.*.md` генерируются `scripts/readme/gen.py` +
-  `scripts/readme/lang_*.py`. Ссылки на jub0t, спонсора и сайт concatenate.pages.dev. Решение по
-  переводам — Р3. Предложение: свой README Cutless ru/en, файлы апстрима не трогать, чтобы не
-  конфликтовать при слияниях.
-- `TRANSLATING.md` упоминает `app.concat.editor` в пути пользовательских локалей.
+- `README.md` — апстрима: ссылки на jub0t, спонсора и сайт concatenate.pages.dev. Его 25 переводов
+  и генератор `scripts/readme/` удалены 2026-10-16 (Р3). Нужен свой README Cutless ru/en.
+- `docs/TRANSLATING.md` упоминает `app.concat.editor` в пути пользовательских локалей.
 
 ## Порядок работ
 

@@ -44,7 +44,7 @@ the patent licences granted to you under this agreement terminate.
 
 You agree that the Project may license your Contribution under
 AGPL-3.0-or-later, together with the exceptions in
-[`LICENSE-EXCEPTIONS.md`](LICENSE-EXCEPTIONS.md), as part of Concat.
+[`LICENSE-EXCEPTIONS.md`](../LICENSE-EXCEPTIONS.md), as part of Concat.
 
 The Project offers Concat under that licence only: not under commercial terms,
 and not under any other licence. Version 1.0 of this agreement also allowed

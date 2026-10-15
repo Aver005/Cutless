@@ -12,7 +12,7 @@ identifies builds that come from this project, so that a user downloading
 ## The marks
 
 - The word mark **Concat**, as the name of this video editor.
-- The Concat logo and its variants, in [`assets/`](assets/).
+- The Concat logo and its variants, in [`assets/`](../../assets/).
 
 Copyright and marks are held by Jareer (GitHub: [@jub0t](https://github.com/jub0t)).
 

@@ -13,12 +13,12 @@
 | `src/patches/i-slint-renderer-skia/` | Вендоренный патч рендерера Slint: ClearType, привязка глифов к пикселям |
 | `assets/` | Иконки, логотипы, инсталляторы (`windows/`, `linux/`, `arch/`). Ребрендинг — `reference/REBRAND.md` |
 | `models/manifest.toml` | 23 скачиваемые модели с SHA-256 и лицензиями |
-| `scripts/` | `locales.py`, `models.py` (проверки), `readme/` (генератор README), `ci/` (смоук, зависимости) |
+| `scripts/` | `locales.py`, `models.py` (проверки), `ci/` (смоук, зависимости) |
 | `.github/workflows/` | `ci.yml`, `release.yml`, `build-app.yml`, `mobile.yml`, `nix.yml`, `models.yml` |
+| `.github/` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md` — документы сообщества апстрима |
 | `.claude/skills/run-concat/` | Навык апстрима: как собрать и запустить окно |
-| `audit/` | Отчёты ревью кода апстрима, последний — `AUDIT-2026-10-12-QUICK.md` |
-| `docs/` | `KEYBOARD_SHORTCUTS.md` и 25 переводов README |
-| `ARCHITECTURE.md`, `CONTRIBUTING.md`, `TRADEMARK.md`, `LICENSE-EXCEPTIONS.md`, `CLA.md` | Документы апстрима |
+| `docs/` | Документы апстрима: `ARCHITECTURE.md`, `TRANSLATING.md`, `THIRD_PARTY_NOTICES.md`, `LICENSE-EXCEPTIONS.md`, `KEYBOARD_SHORTCUTS.md` |
+| `docs/upstream/` | Документы апстрима для справки: `CLA.md`, `TRADEMARK.md`, `CODE_SIGNING.md`, `audit/` (последний — `AUDIT-2026-10-12-QUICK.md`) |
 | `CLAUDE.md`, `.memories/` | Cutless: мост для агентов и база знаний |
 
 ## Движок — `src/crates/`

@@ -19,11 +19,11 @@ carry their own maintainers' signatures where they have them.
 
 - Every signed file is built by GitHub Actions from a tagged commit of
   <https://github.com/jub0t/concat>, by the workflows in
-  [`.github/workflows`](.github/workflows) (`release.yml`, which calls
+  [`.github/workflows`](../../.github/workflows) (`release.yml`, which calls
   `build-app.yml`). Nothing built on a person's machine is signed.
 - A release is built only after the tests pass on the tagged commit, and each
   Windows bundle is launched before it is uploaded (see
-  [`scripts/ci`](scripts/ci)).
+  [`scripts/ci`](../../scripts/ci)).
 - Every signing request is approved by hand by an approver, below.
 - The workflows and build scripts are part of the source and are reviewed like
   any other change.

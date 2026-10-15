@@ -41,7 +41,7 @@ Slint UI - is one Cargo workspace under `src/`.
 |---|---|
 | `src/crates/` | The engine (core, media, render, export, project), the host layer (`concat-host`, `concat-speech`), the CLI, and `concat`, the Slint editor window |
 
-[`src/README.md`](src/README.md) explains how the crates fit together and
+[`src/README.md`](../src/README.md) explains how the crates fit together and
 where the sharp edges are. Read it before touching the engine.
 
 ## Checks
@@ -55,10 +55,10 @@ cd src && cargo fmt --check && cargo clippy --all-targets -- -D warnings && carg
 If you added or changed text the interface shows, also run
 `python3 scripts/locales.py` so the string inventory follows; CI checks it.
 Translations live in one JSON file per language — see
-[`TRANSLATING.md`](TRANSLATING.md).
+[`TRANSLATING.md`](../docs/TRANSLATING.md).
 
 If you added or changed a downloadable model, put it in
-[`models/manifest.toml`](models/manifest.toml) as well as the engine table it
+[`models/manifest.toml`](../models/manifest.toml) as well as the engine table it
 belongs to, and run `python3 scripts/models.py --check`; CI checks that too.
 A maintainer then runs the *Mirror models* workflow, which fetches the model,
 records its digest in both places and publishes it to the mirror the app
@@ -75,11 +75,11 @@ around you; the engine avoids cleverness on purpose.
 
 ## Licensing your contribution
 
-Concat is **AGPL-3.0-or-later** ([`LICENSE`](LICENSE)), with a plugin exception
+Concat is **AGPL-3.0-or-later** ([`LICENSE`](../LICENSE)), with a plugin exception
 so that Concat API plugins can carry their own licence
-([`LICENSE-EXCEPTIONS.md`](LICENSE-EXCEPTIONS.md)).
+([`LICENSE-EXCEPTIONS.md`](../docs/LICENSE-EXCEPTIONS.md)).
 
-Contributions are accepted under the CLA in [`CLA.md`](CLA.md). **You keep the
+Contributions are accepted under the CLA in [`CLA.md`](../docs/upstream/CLA.md). **You keep the
 copyright in your work** — the CLA is a licence, not an assignment. It exists so
 that copyright in Concat stays centralised, which is what makes the AGPL
 enforceable against companies that take the code without honouring it.
@@ -114,7 +114,7 @@ catch before a merge than after a release.
 ## Trademarks
 
 The code is free to fork. The Concat name and logo are not covered by the AGPL
-grant — see [`TRADEMARK.md`](TRADEMARK.md). Forks are welcome; please ship them
+grant — see [`TRADEMARK.md`](../docs/upstream/TRADEMARK.md). Forks are welcome; please ship them
 under your own name.
 
 ## Conduct

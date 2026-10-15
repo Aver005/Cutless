@@ -603,9 +603,9 @@ the Slint tree none.
 
 ## 15. Where we stand today
 
-The audits in `audit/` (23 and 28 September, 4, 9 and 11 October) score
+The audits in `docs/upstream/audit/` (23 and 28 September, 4, 9 and 11 October) score
 every crate and feature and name each finding with a file and a line;
-`audit/AUDIT-2026-10-11.md` is the current one and this section is its
+`docs/upstream/audit/AUDIT-2026-10-11.md` is the current one and this section is its
 one-page shape. Whole-app scores on 11 October: architecture 8, user
 likeability 7, code quality 6, design philosophy 6, performance 6, testing
 6, documentation 6, maintainability 5, scalability 5, security 4, CI and

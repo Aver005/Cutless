@@ -26,8 +26,6 @@
   <a href="https://concatenate.pages.dev/#download"><img src="https://cdn.jsdelivr.net/gh/jub0t/Concat@main/assets/download_button.svg" alt="Download Concat" width="220" /></a>
 </p>
 
-**🇬🇧 English** · [🇩🇪 Deutsch](docs/README.de.md) · [🇪🇸 Español](docs/README.es.md) · [🇫🇷 Français](docs/README.fr.md) · [🇮🇹 Italiano](docs/README.it.md) · [🇳🇱 Nederlands](docs/README.nl.md) · [🇵🇱 Polski](docs/README.pl.md) · [🇧🇷 Português (Brasil)](docs/README.pt-BR.md) · [🇷🇺 Русский](docs/README.ru.md) · [🇺🇦 Українська](docs/README.uk.md) · [🇹🇷 Türkçe](docs/README.tr.md) · [🇭🇷 Hrvatski](docs/README.hr.md) · [🇮🇩 Bahasa Indonesia](docs/README.id.md) · [🇻🇳 Tiếng Việt](docs/README.vi.md) · [🇹🇭 ไทย](docs/README.th.md) · [🇯🇵 日本語](docs/README.ja.md) · [🇰🇷 한국어](docs/README.ko.md) · [🇨🇳 简体中文](docs/README.zh-Hans.md) · [🇹🇼 繁體中文](docs/README.zh-TW.md) · [🇸🇦 العربية](docs/README.ar.md) · [🇮🇱 עברית](docs/README.he.md) · [🇮🇷 فارسی](docs/README.fa.md) · [🇮🇳 हिन्दी](docs/README.hi.md) · [🇵🇰 اردو](docs/README.ur.md) · [🇧🇩 বাংলা](docs/README.bn.md)
-
 ## Paid Sponsors
 
 <table width="100%">
@@ -96,7 +94,7 @@ Concat is in **beta**: it works, and it still has edges. [Say so](https://github
 
 **System requirements** and the optional model sizes are on [the website](https://concatenate.pages.dev/guides/system-requirements).
 
-**[Code signing policy](CODE_SIGNING.md)**: who signs the Windows builds, and what Concat sends over the network (nothing you did not ask for).
+**[Code signing policy](docs/upstream/CODE_SIGNING.md)**: who signs the Windows builds, and what Concat sends over the network (nothing you did not ask for).
 
 ## Build from source
 
@@ -121,14 +119,14 @@ cargo test                            # run the test suite
 cargo fmt --check && cargo clippy --all-targets -- -D warnings   # what CI checks
 ```
 
-If you change text the interface shows, run `python3 scripts/locales.py` from the repo root so the string inventory stays in sync. Full details live in [CONTRIBUTING.md](CONTRIBUTING.md).
+If you change text the interface shows, run `python3 scripts/locales.py` from the repo root so the string inventory stays in sync. Full details live in [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
 ## How to Contribute
 
 > [!IMPORTANT]
 > The best way to contribute is to grab a build from the [Releases](https://github.com/jub0t/Concat/releases) page and use it: find where it breaks, and say where it could be better.
 >
-> Ready to write code? [CONTRIBUTING.md](./CONTRIBUTING.md) covers setup, the layout of the tree, the checks to run, and how contributions are licensed. Driving Concat from a script, a service or an agent? [The developer docs](https://concatenate.pages.dev/docs) cover the Concat API and its transports: JSON-RPC, gRPC and MCP. [This Discussion](https://github.com/jub0t/Concat/discussions/3) is where the project was announced.
+> Ready to write code? [CONTRIBUTING.md](./.github/CONTRIBUTING.md) covers setup, the layout of the tree, the checks to run, and how contributions are licensed. Driving Concat from a script, a service or an agent? [The developer docs](https://concatenate.pages.dev/docs) cover the Concat API and its transports: JSON-RPC, gRPC and MCP. [This Discussion](https://github.com/jub0t/Concat/discussions/3) is where the project was announced.
 > 
 > Contributors are free to claim a `@Contributor` role in the Discord server, just ask for it.
 
