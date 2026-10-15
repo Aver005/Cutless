@@ -1,0 +1,20 @@
+[effect]
+id = "cutless.phone-voice"
+name = "Phone Voice"
+kind = "audio"
+category = "Clean"
+order = 45
+intensity = "amount"
+description = "Made for a phone's front microphone in a room: cuts rumble and hiss, brings the voice forward and evens its level."
+
+[[param]]
+key = "amount"
+label = "Amount"
+min = 0
+max = 100
+default = 60
+step = 1
+unit = "%"
+
+[ffmpeg]
+chain = "highpass=f=90,lowpass=f=14000,afftdn=nf={fixed(0 - 30 - amount / 100 * 20, 1)}:nr={fixed(8 + amount / 100 * 20, 1)},equalizer=f=3000:t=q:w=1:g={fixed(amount / 100 * 4, 1)},acompressor=threshold={fixed(0.4 - amount / 100 * 0.25, 2)}:ratio={fixed(2.5 + amount / 100 * 2, 1)}:attack=10:release=150,alimiter=limit=0.95"

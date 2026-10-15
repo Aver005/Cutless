@@ -37,7 +37,9 @@ mod builtins {
     include!(concat!(env!("OUT_DIR"), "/builtins.rs"));
 }
 
-pub use catalogue::{At, Catalogue, Fixture, Package, Probe, package_folders, package_stamp};
+pub use catalogue::{
+    At, Catalogue, Fixture, Package, Probe, builtin_name, package_folders, package_stamp,
+};
 pub use manifest::{CardSettings, FORMAT, Kind, Manifest, Param, ParamType, Space};
 pub use shader::{Contract, Shader, TransitionShader};
 
@@ -332,7 +334,7 @@ mod tests {
     fn built_in_ids_are_namespaced_and_bare_aliases_still_resolve() {
         let catalogue = Catalogue::builtin();
         for package in catalogue.packages() {
-            assert!(package.id().starts_with("concat."), "{}", package.id());
+            assert!(builtin_name(package.id()).is_some(), "{}", package.id());
         }
         assert_eq!(catalogue.get("glow").map(Package::id), Some("concat.glow"));
         assert_eq!(

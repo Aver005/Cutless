@@ -1,0 +1,13 @@
+[[case]]
+name = "default"
+chain = "agate=threshold=0.00562:range=0.06310:attack=5:release=200"
+
+[[case]]
+name = "minimum"
+at = "min"
+chain = "agate=threshold=0.00032:range=0.50119:attack=5:release=200"
+
+[[case]]
+name = "maximum"
+at = "max"
+chain = "agate=threshold=0.10000:range=0.00100:attack=5:release=200"

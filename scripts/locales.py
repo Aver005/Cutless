@@ -138,7 +138,8 @@ def manifest_strings() -> dict[str, str]:
     """The keys the window makes from manifests and presets, with their English."""
     out: dict[str, str] = {}
     for manifest in sorted(PACKAGES.glob("*/effect.toml")):
-        name = manifest.parent.name.removeprefix("concat.")
+        # A built-in's folder is its id, `author.name`: Concat's or Cutless's.
+        name = manifest.parent.name.split(".", 1)[-1]
         part = key_part(name.replace("-", " "))
         for field, literal in TOML_FIELD.findall(manifest.read_text(encoding="utf-8")):
             value = unescape(literal)

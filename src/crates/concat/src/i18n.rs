@@ -313,7 +313,7 @@ pub fn key_part(text: &str) -> String {
 /// up as `effects.<name>.<field>` for one that ships with the app, and as
 /// its author wrote it for anyone else's.
 pub fn package_text(id: &str, field: &str, text: &str) -> String {
-    match id.strip_prefix("concat.") {
+    match concat_effects::builtin_name(id) {
         Some(name) => t_or(
             &format!("effects.{}.{field}", key_part(&name.replace('-', " "))),
             text,
@@ -504,7 +504,7 @@ mod tests {
         };
         for package in concat_effects::Catalogue::builtin().packages() {
             let meta = &package.manifest.effect;
-            let name = meta.id.strip_prefix("concat.").expect("a built-in");
+            let name = concat_effects::builtin_name(&meta.id).expect("a built-in");
             let part = key_part(&name.replace('-', " "));
             check(format!("effects.{part}.name"), &meta.name);
             check(format!("effects.{part}.description"), &meta.description);

@@ -1,0 +1,28 @@
+[effect]
+id = "cutless.noise-gate"
+name = "Noise Gate"
+kind = "audio"
+category = "Clean"
+order = 44
+description = "Turns the room down between phrases: anything quieter than the threshold is lowered."
+
+[[param]]
+key = "threshold"
+label = "Threshold"
+min = -70
+max = -20
+default = -45
+step = 1
+unit = "dB"
+
+[[param]]
+key = "reduction"
+label = "Reduction"
+min = 6
+max = 60
+default = 24
+step = 1
+unit = "dB"
+
+[ffmpeg]
+chain = "agate=threshold={fixed(pow(10, threshold / 20), 5)}:range={fixed(pow(10, 0 - reduction / 20), 5)}:attack=5:release=200"

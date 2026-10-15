@@ -1,0 +1,23 @@
+format = 2
+
+[effect]
+id = "cutless.video-denoise"
+name = "Video Denoise"
+kind = "effect"
+category = "Basic"
+order = 14
+intensity = "strength"
+description = "Smooths the grain a phone camera adds in dim light and keeps the edges sharp."
+
+[[param]]
+key = "strength"
+label = "Strength"
+min = 0
+max = 100
+default = 40
+step = 1
+unit = "%"
+
+[wgsl]
+entry = "effect.wgsl"
+space = "display"

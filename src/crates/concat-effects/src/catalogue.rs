@@ -23,9 +23,18 @@ use crate::manifest::{Kind, Manifest, ParamType};
 use crate::shader::{Shader, TransitionShader};
 use crate::template::Template;
 
-/// The author every built-in package is under, and no other package may
-/// be: the front of an id, before the dot.
-pub const BUILTIN_AUTHOR: &str = "concat";
+/// The authors the built-in packages are under, and no other package may
+/// be: the front of an id, before the dot. Cutless ships its own under
+/// `cutless`, beside Concat's.
+pub const BUILTIN_AUTHORS: &[&str] = &["concat", "cutless"];
+
+/// A built-in id's name without its author - `glow` for `concat.glow` -
+/// and `None` for an id under anyone else.
+pub fn builtin_name(id: &str) -> Option<&str> {
+    id.split_once('.')
+        .filter(|(author, _)| BUILTIN_AUTHORS.contains(author))
+        .map(|(_, name)| name)
+}
 
 /// A compiled FFmpeg backend.
 #[derive(Clone, Debug)]
@@ -729,15 +738,13 @@ impl Package {
         // with the app, and which won would turn on load order.
         let reserved = std::iter::once(manifest.effect.id.as_str())
             .chain(manifest.effect.aliases.iter().map(String::as_str))
-            .find(|name| {
-                name.split_once('.')
-                    .is_some_and(|(author, _)| author == BUILTIN_AUTHOR)
-            });
+            .find(|name| builtin_name(name).is_some());
         if let Some(name) = reserved {
+            let author = name.split_once('.').map_or(name, |(author, _)| author);
             return Err(Error::Invalid {
                 id: manifest.effect.id.clone(),
                 message: format!(
-                    "`{name}` is under `{BUILTIN_AUTHOR}.`, the author of the packages that \
+                    "`{name}` is under `{author}.`, the author of the packages that \
                      ship with the app; a package of your own is `author.name`"
                 ),
             });

@@ -1,0 +1,28 @@
+[effect]
+id = "cutless.band-cut"
+name = "Low and High Cut"
+kind = "audio"
+category = "Clean"
+order = 43
+description = "Cuts the rumble under the voice and the hiss above it, at the frequencies you set."
+
+[[param]]
+key = "low"
+label = "Low cut"
+min = 20
+max = 500
+default = 80
+step = 5
+unit = "Hz"
+
+[[param]]
+key = "high"
+label = "High cut"
+min = 3000
+max = 20000
+default = 15000
+step = 100
+unit = "Hz"
+
+[ffmpeg]
+chain = "highpass=f={round(low)},lowpass=f={round(high)}"
