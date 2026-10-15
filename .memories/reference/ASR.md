@@ -1,5 +1,5 @@
 # ASR — распознавание речи для субтитров
-> Форматы моделей, движки, свои модели. Last updated: 2026-10-16 (исследование; решения нет).
+> Форматы моделей, движки, свои модели. Last updated: 2026-10-16 (движок `transcribe-cpp` одобрен и проверен на Windows).
 
 ## Пожелание владельца
 
@@ -44,7 +44,24 @@ RNNT у Nemotron, seq2seq у Whisper, CTC у GigaAM, плюс свой токе�
 - **GigaAM v3** (ai-sage, MIT) — заточена под русский.
 - **Whisper** — то, что дообучают коллеги. Конвертируется в ggml/GGUF скриптами whisper.cpp.
 
-## Рекомендация (ждёт решения владельца)
+## Проверка `transcribe-cpp` 0.4.0 на машине владельца (2026-10-16)
+
+- **Сборка:** отдельный пробный крейт, `default-features = false` (без `metal`), Windows + MSVC + cmake из
+  Visual Studio — **161 с, без ошибок**, exe 3,6 МБ. Сборка целиком из исходников, без скачиваний.
+- **Модель:** Nemotron 3.5 Q8_0 GGUF прямо из кэша Hugging Face (Handy), загрузка 0,8–1 с, `arch=parakeet`.
+- **Русская речь** (16,7 с, синтез голосом Windows Irina): **1,6 с на CPU** (~10× быстрее реального времени),
+  пунктуация и заглавные есть, тайм-коды по словам (`TimestampKind::Token`), `language=None` — автоопределение.
+  Ошибки: «Каттлесс» → «котлес» (лечится `RunOptions::vocabulary`), «вырежем» → «вырежим».
+- **Коды языков у модели — BCP-47** (`ru-RU`, `en-US`, … 32 штуки), не `ru`. `language: Some("ru")` →
+  ошибка `unsupported language`. Брать коды из `model.capabilities().languages`.
+- **Старые модели whisper.cpp `.bin` движок тоже читает** (`transcribe-bin-loader.cpp`) — уже скачанные
+  пользователями модели Whisper не придётся качать заново.
+- В крейте есть ещё **VAD (Silero)**, определение языка и разделение по говорящим — VAD пригодится
+  вырезателю пауз (`reference/PAUSES.md`).
+- `Capabilities.max_audio_ms = 0` у Nemotron — без практического предела длины; у других семейств
+  предел есть — длинное аудио резать по VAD.
+
+## Рекомендация (одобрена владельцем 2026-10-16: `transcribe-cpp`)
 
 1. Трейт движка в `concat-speech`: `AsrEngine { load(ModelSource), run(pcm, options{language, words}) }`.
 2. Источник модели `ModelSource`:
