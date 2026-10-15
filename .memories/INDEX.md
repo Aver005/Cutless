@@ -32,6 +32,8 @@
 | `reference/REBRAND.md` | Чек-лист переименования: все места, где зашит Concat |
 | `reference/UPSTREAM.md` | Как жить рядом с апстримом: remotes, ветки, синхронизация, PR |
 | `reference/MONETIZATION.md` | Подписка поверх AGPL: что можно, что нельзя, варианты |
+| `reference/PAUSES.md` | Вырезатель пауз: идея владельца, разбор кода, проект, открытые вопросы |
+| `reference/ASR.md` | Распознавание речи: форматы моделей, движки, Parakeet и Nemotron, свои модели |
 
 Документы апстрима, которые стоит знать: `ARCHITECTURE.md` (§15 — известные проблемы),
 `src/README.md` (крейты), `audit/AUDIT-2026-10-12-QUICK.md` (последний аудит), `TRADEMARK.md`,
