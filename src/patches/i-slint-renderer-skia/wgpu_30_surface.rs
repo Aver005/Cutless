@@ -609,7 +609,7 @@ impl Backend {
             #[cfg(target_vendor = "apple")]
             Self::Metal => unsafe { metal::make_metal_surface(gr_context, texture) },
             #[cfg(target_family = "windows")]
-            Self::Dx12 => unsafe { dx12::make_dx12_surface(gr_context, texture, None) },
+            Self::Dx12 => unsafe { dx12::make_dx12_surface(gr_context, texture) },
             #[cfg(skia_wgpu_vulkan)]
             Self::Vulkan { .. } => unsafe {
                 vulkan::make_vulkan_surface(
@@ -635,13 +635,8 @@ impl Backend {
         match self {
             #[cfg(target_vendor = "apple")]
             Self::Metal => unsafe { metal::make_metal_surface(gr_context, texture) },
-            // Concat: the window, and only the window, takes the desk's
-            // ClearType settings; a texture rendered to may be composited
-            // anywhere, where LCD coverage would fringe.
             #[cfg(target_family = "windows")]
-            Self::Dx12 => unsafe {
-                dx12::make_dx12_surface(gr_context, texture, dx12::system_text_props().as_ref())
-            },
+            Self::Dx12 => unsafe { dx12::make_dx12_surface(gr_context, texture) },
             #[cfg(skia_wgpu_vulkan)]
             Self::Vulkan { .. } => unsafe {
                 vulkan::make_vulkan_surface(

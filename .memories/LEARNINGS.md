@@ -109,3 +109,17 @@
   - номера строк (`→ path:line`) допускает только в `BUGS.md` и `reference/`.
 
   Свои статусы и стрелки в прозе дают предупреждения.
+
+## Отладка падений окна
+
+- **Адрес падения из лога** (`crash: ... in concat.exe+0x…`) разрешается в функцию:
+  `vendor/llvm/bin/llvm-symbolizer.exe --obj=src/target/quick/concat.exe --relative-address 0x…`
+  (символизатор вынут из архива LLVM в `vendor/dl/llvm.tar.xz`; PDB профиля `quick` лежит рядом с exe).
+- **Лог окна** — `%LOCALAPPDATA%pp.concat.editor\logs\concat-*.log` (пока не сменён идентификатор).
+- **Сравнение с официальной сборкой без установки:** `msiexec /a Concat-…msi /qn TARGETDIR=<папка>` распаковывает
+  MSI, exe запускается из `PFiles64\Concat`. Так за минуту видно, виноват код после релиза или машина.
+- **Бэкенд wgpu на Windows жёстко DX12** (`concat/src/gpu.rs`): Skia собран только под D3D, Vulkan окну недоступен,
+  `WGPU_BACKEND` ничего не меняет.
+- **Скриншоты окна — через `PrintWindow(PW_RENDERFULLCONTENT)`**, не с экрана: окно может быть перекрыто.
+  Скрипт съёмки в нескольких размерах — `shoot.ps1` (черновая папка сессии; при надобности перенести в `scripts/cutless/`).
+- **Playwright MCP не открывает `file:`** — для проверки HTML поднимать `python -m http.server`.

@@ -34,3 +34,12 @@
 - `[BUG]` `[LOW]` **Около 15 строк интерфейса мимо i18n** (§15 апстрима). Задевает только полноту русского перевода.
 - `[BUG]` `[LOW]` **Windows-сборки апстрима не подписаны, на Windows on ARM 0.2.7 падает при старте**
   (issue #326 апстрима) `[?]`. Для Cutless — Ф1.10 и Р3.
+
+## Исправлено у нас
+
+- `[DONE]` `[CRITICAL]` **Окно падает при запуске на Windows с видеокартой (2026-10-16).** Коммит апстрима
+  `bdcaedf` «ClearType on Windows» (14.10.2026): `SkCanvas::getTopProps` на пустом холсте → `ACCESS_VIOLATION`,
+  а без этой строки — «Failed to wait for GPU to come idle» при настройке поверхности DX12. Официальная сборка
+  v0.2.7 (до коммита) на той же машине работает. **Лечение в Cutless — откат `bdcaedf`** (три файла
+  `src/patches/i-slint-renderer-skia`). CI апстрима не ловит: там WARP, без настоящего GPU и ClearType.
+  Кандидат на issue/PR → апстрим. → `src/patches/i-slint-renderer-skia/itemrenderer.rs:1121`
