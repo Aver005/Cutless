@@ -10,7 +10,22 @@
   ошибками путей.
 - **`FFMPEG_DIR` задаётся в окружении машины, не в `src/.cargo/config.toml`.** Комментарий в этом файле
   прямо запрещает: путь машины в репозитории ломает чужие сборки.
-- **На Windows DLL FFmpeg должны быть в `PATH`**, иначе тесты и окно не стартуют. Сборка — BtbN `win64-gpl-shared` `[?]`.
+- **На Windows DLL FFmpeg должны быть в `PATH`**, иначе тесты и окно не стартуют. Нужна именно сборка
+  `win64-gpl-shared`: статическая `ffmpeg-master-latest-win64-gpl` (стоит у владельца в `E:\Apps\ffmpeg`)
+  не подходит — в ней нет заголовков и `.lib`.
+- **Кроме FFmpeg сборке на Windows нужны** libclang (bindgen), cmake (whisper.cpp), ONNX Runtime
+  (`ORT_LIB_LOCATION` + `ORT_PREFER_DYNAMIC_LINK=1`) и библиотеки sherpa-onnx (`SHERPA_ONNX_LIB_DIR`).
+  README апстрима упоминает только FFmpeg, полный список — в `ci.yml`. Всё это ставит
+  `scripts/cutless/win-deps.sh`.
+- **cmake на машине владельца есть только внутри Visual Studio** (Community 2022 и Build Tools на `H:`),
+  в `PATH` его нет. libclang, 7-Zip и `python3` нет; Python запускается как `python`.
+- **`skia-bindings` во время сборки качает готовый Skia с GitHub.** Это происходит для каждого профиля
+  (`quick` и `dev` — разные папки в `target/`). Если сеть мигнула, build-скрипт пытается собрать Skia из
+  исходников и падает. Лечится повторным запуском при живой сети. Код ошибки — в логе: `curl error code: "6"`.
+- **Профили `quick` (окно, `cargo dev`) и `dev` (clippy, тесты) собираются отдельно.** Первый clippy после
+  первого `cargo dev` снова компилирует все зависимости.
+- **У LLVM для Windows есть портативный архив** `clang+llvm-*-x86_64-pc-windows-msvc.tar.xz` (~940 МБ).
+  Из него достаточно вытащить `bin/libclang.dll`, установщик с правами администратора не нужен.
 - **`.slint` компилируется в потоке со стеком 512 МБ** (`src/crates/concat/build.rs`). На Windows
   компилятор Slint иначе падал с переполнением стека. Не «упрощать».
 - **Обновление Slint = ручной перенос патча** `src/patches/i-slint-renderer-skia` (ClearType, глифы).
@@ -60,6 +75,14 @@
 
 ## Окружение и инструменты
 
+- **Git-личность в этом репозитории — локальная** (`.git/config`): `Curly Aver <aver.tema.005@yandex.ru>`,
+  подпись SSH-ключом `C:/ssh/curly.pri`. В глобальном `~/.gitconfig` — рабочие почта и ключ rtatex: без
+  локального конфига личные коммиты уйдут под рабочей личностью. Так уже случилось 2026-10-16, исправлено
+  `--amend --reset-author` и форс-пушем.
+- **`curly.pri` — ключ в старом формате PEM.** `ssh-keygen -Y sign` не достаёт из него открытую часть и
+  ищет рядом `curly.pri.pub` — его создали через `ssh-keygen -y`. Ключа нет в `allowed_signers`, поэтому
+  локально подпись видна как `U`. Чтобы GitHub показывал Verified, `curly.pri.pub` нужно добавить в
+  Aver005 как Signing key.
 - **`gh` на машине владельца не установлен** (2026-10-16). Данные о репозиториях — через
   `curl https://api.github.com/repos/...`.
 - **Линтер базы знаний** (расширение владельца `dot-memories-ext`):

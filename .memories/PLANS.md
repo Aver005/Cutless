@@ -28,12 +28,12 @@
 
 | # | Задача | Статус |
 |---|---|---|
-| Ф0.1 | Форк на GitHub: https://github.com/Aver005/Cutless, `main` — зеркало. Осталось: запушить `develop` и сделать её веткой по умолчанию (`reference/UPSTREAM.md`) | `[WIP]` владелец |
+| Ф0.1 | Форк https://github.com/Aver005/Cutless, `main` — зеркало, `develop` запушена. Осталось: Settings → Default branch = `develop` | `[WIP]` владелец |
 | Ф0.2 | Remotes: `upstream` = jub0t/concat (пуш выключен), `origin` = Aver005/Cutless, ветка `develop` | `[DONE]` |
-| Ф0.3 | Собрать на Windows: FFmpeg BtbN `win64-gpl-shared`, `FFMPEG_DIR`, `PATH`, cmake, MSVC. Записать в `LEARNINGS.md` всё, что споткнулось | `[TODO]` |
+| Ф0.3 | Собрать на Windows. Зависимости — `scripts/cutless/win-deps.sh` (FFmpeg, LLVM, ONNX Runtime, sherpa в `vendor/`), окружение — `vendor/env.sh`. Грабли — в `LEARNINGS.md` | `[WIP]` |
 | Ф0.4 | Прогнать гейт: `fmt`, `clippy -D warnings`, `cargo test`. Число тестов и время — в `STATE.md` | `[TODO]` |
 | Ф0.5 | Руками через `concat-cli api` пройти цепочку из пяти вызовов: `project.create`, `media.import`, `edit.apply` (`splitClips`, `addTextClip`), `preview.frame`, `export.run`. Сохранить запросы как сценарий `scripts/cutless/api-smoke.jsonl` | `[TODO]` |
-| Ф0.6 | Pre-commit hook с гейтом (`.githooks/pre-commit`, `core.hooksPath`) | `[TODO]` |
+| Ф0.6 | Pre-commit hook `.githooks/pre-commit`: fmt + clippy при правках `src/`, `locales.py`/`models.py` при правках строк и моделей. Включён через `core.hooksPath` | `[DONE]` |
 | Ф0.7 | Первый коммит в `develop`: `.memories/`, `CLAUDE.md`, `.gitignore` (`.trae/` в git не идёт) | `[WIP]` |
 | Ф0.8 | Включить в форке только `ci.yml`. `release.yml` и `models.yml` — после Ф1 | `[TODO]` |
 

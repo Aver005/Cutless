@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Гейт Cutless перед коммитом: формат и clippy для Rust, сверка строк и моделей, если их тронули.
+# Полный cargo test сюда не входит — он долгий и идёт руками перед пушем (.memories/CONVENTIONS.md).
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+touches() { grep -qE "$1" <<< "$staged"; }
+
+# Окружение сборки (FFmpeg, libclang), если оно разложено скриптом win-deps.sh.
+[ -f "$root/vendor/env.sh" ] && source "$root/vendor/env.sh"
+
+python=$(command -v python3 || command -v python)
+
+if touches '^src/'; then
+  echo "pre-commit: cargo fmt --check"
+  (cd "$root/src" && cargo fmt --check)
+  echo "pre-commit: cargo clippy"
+  (cd "$root/src" && cargo clippy --all-targets -- -D warnings)
+fi
+
+if touches '^src/crates/concat/(locales/|ui/|src/)'; then
+  echo "pre-commit: locales.py --check"
+  "$python" "$root/scripts/locales.py" --check
+fi
+
+if touches '^(models/|scripts/models\.py|src/crates/concat-host/src/models\.rs)'; then
+  echo "pre-commit: models.py --check"
+  "$python" "$root/scripts/models.py" --check
+fi

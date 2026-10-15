@@ -47,7 +47,14 @@ python3 ../scripts/locales.py --check     # если тронуты строки
 python3 ../scripts/models.py --check      # если тронуты модели
 ```
 
-Pre-commit hook — Ф0.6. Коммит только из документации (`.memories/`, `*.md`) гейт Cargo не требует.
+Pre-commit hook — `.githooks/pre-commit`, включается один раз: `git config core.hooksPath .githooks`.
+Что он делает:
+- коммит без файлов в `src/` гейт Cargo пропускает;
+- при правках в `src/` — `fmt --check` и `clippy`;
+- при правках строк и моделей — `locales.py` и `models.py`.
+
+**`cargo test` хук не запускает** (на Windows это десятки минут) — его прогоняют руками перед пушем.
+Хук сам подхватывает `vendor/env.sh`.
 
 ## Коммиты Cutless
 
