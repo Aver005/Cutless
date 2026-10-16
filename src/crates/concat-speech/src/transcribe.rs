@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
 
-//! Whisper transcription: audio in, timed caption segments out.
+//! Speech transcription: audio in, timed caption segments out.
 //!
-//! whisper.cpp runs in-process through `whisper-rs`, the way Kokoro runs
-//! through sherpa-onnx: no binary to ship or find, and cancellation is a
-//! callback returning `true`. On macOS the Metal build is used, so the
-//! encoder runs on the GPU.
+//! transcribe.cpp runs in-process through `transcribe-cpp`, the way Kokoro
+//! runs through sherpa-onnx: no binary to ship or find, and cancellation is a
+//! token that another thread trips. It reads GGUF models (Whisper, Parakeet,
+//! Nemotron, GigaAM) and the older whisper.cpp `.bin` files; on the Mac the
+//! Metal build runs the encoder on the GPU.
 //!
 //! Two pieces:
 //!
@@ -16,17 +17,18 @@
 //!    model is cached until another is asked for, because loading one takes
 //!    seconds.
 //! 2. **Transcription.** The engine's audio decoder hands over the clip's
-//!    window as 16 kHz mono floats - the input whisper wants - and the
-//!    segments come back relative to the window.
+//!    window as 16 kHz mono floats, and the segments come back relative to
+//!    the window, each carrying the words the model timed inside it.
 
+use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Once};
 
 use concat_host::{AppDirs, SingleFlight};
 use concat_media::{AudioDecoder, AudioOptions, SampleFormat};
 use serde::{Deserialize, Serialize};
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use transcribe_cpp::{CancelToken, Model, RunOptions};
 
 use crate::{DownloadProgress, JobStage};
 
@@ -126,18 +128,20 @@ fn models_dir(dirs: &AppDirs) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// whisper's abort callback: `user_data` is the run's cancel flag, and a
-/// true here stops the computation where it stands. See `transcribe`.
-unsafe extern "C" fn abort_when_set(user_data: *mut std::ffi::c_void) -> bool {
-    // SAFETY: the caller passed `Arc::as_ptr` of an `AtomicBool` it keeps
-    // alive for as long as whisper may call this.
-    unsafe { (*(user_data as *const AtomicBool)).load(Ordering::Relaxed) }
-}
-
 fn model_file(dirs: &AppDirs, id: &str) -> Result<PathBuf, String> {
     // Ids come from our own table; anything else is a bug, not input.
     known(id).ok_or_else(|| format!("unknown model {id:?}"))?;
     Ok(models_dir(dirs)?.join(format!("ggml-{id}.bin")))
+}
+
+/// The file a run reads: a model placed by the table, or one named outright
+/// by `CONCAT_TRANSCRIBE_MODEL` - the hook the ignored `real_audio` test
+/// uses to run a GGUF from anywhere on disk.
+fn run_model_file(dirs: &AppDirs, id: &str) -> Result<PathBuf, String> {
+    match std::env::var_os("CONCAT_TRANSCRIBE_MODEL") {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => model_file(dirs, id),
+    }
 }
 
 /// One model, as the settings panel shows it.
@@ -168,6 +172,18 @@ pub struct TranscriberStatus {
     pub models: Vec<ModelStatus>,
 }
 
+/// One timed word inside a caption, relative to the window's start.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Word {
+    /// Seconds from the window's start.
+    pub start: f64,
+    /// Seconds from the window's start.
+    pub end: f64,
+    /// The word as heard.
+    pub text: String,
+}
+
 /// One caption, in seconds relative to the transcribed window's start.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -178,6 +194,9 @@ pub struct Segment {
     pub end: f64,
     /// What was said.
     pub text: String,
+    /// The words the model timed inside the caption, when it timed any.
+    #[serde(default)]
+    pub words: Vec<Word>,
 }
 
 /// What to transcribe.
@@ -196,11 +215,14 @@ pub struct TranscribeRequest {
     pub window: f64,
     /// Which model to use, e.g. "base.en".
     pub model_id: String,
+    /// The language to hear, or `None` to let the model decide.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 struct LoadedModel {
     id: String,
-    context: WhisperContext,
+    model: Model,
 }
 
 /// The transcriber: the one transcription and the one model download that
@@ -252,8 +274,9 @@ impl Transcriber {
     /// for the whole download: run it on its own thread.
     ///
     /// Written to `<file>.part` and renamed at the end: a download killed
-    /// halfway must never be mistaken for a model, because whisper would fail
-    /// on it with a message that blames the model rather than the download.
+    /// halfway must never be mistaken for a model, because the engine would
+    /// fail on it with a message that blames the model rather than the
+    /// download.
     pub fn download_model(
         &self,
         dirs: &AppDirs,
@@ -316,8 +339,9 @@ impl Transcriber {
 
     /// Transcribes one clip's audio window into caption segments. Blocks
     /// for the whole run: run it on its own thread. `progress` is told each
-    /// stage as it begins, and in whisper's work each window it starts:
-    /// whisper reads thirty seconds at a time, so `next` is a window on.
+    /// stage as it begins, and in the work itself how many of the window's
+    /// pieces are done - one piece, unless the model caps how much audio it
+    /// takes at once, in which case the window is cut to fit.
     ///
     /// Timestamps come back relative to the window: 0 is `source_start`. The
     /// caller owns the clip, so the map onto the timeline (divide by speed,
@@ -331,7 +355,7 @@ impl Transcriber {
         let job = self.gate.begin("transcription")?;
         let cancel = job.cancel_handle();
 
-        let model_path = model_file(dirs, &request.model_id)?;
+        let model_path = run_model_file(dirs, &request.model_id)?;
         if !model_path.is_file() {
             return Err(format!(
                 "model {} is not downloaded - see Settings > Transcriber",
@@ -343,7 +367,10 @@ impl Transcriber {
             return Err("nothing to transcribe: the clip covers no time".to_owned());
         }
 
-        // The window, as whisper wants it: 16 kHz mono floats.
+        // The engine's own chatter goes to the app's log, once.
+        install_logging();
+
+        // The window, as the engine wants it: 16 kHz mono floats.
         progress(JobStage::Reading);
         let mut decoder = AudioDecoder::open(
             &request.path,
@@ -351,7 +378,7 @@ impl Transcriber {
                 start: Some(request.source_start),
                 duration: Some(request.window),
                 filters: Vec::new(),
-                rate: 16_000,
+                rate: SAMPLE_RATE as u32,
                 channels: 1,
                 format: SampleFormat::F32,
                 stream: request.audio_stream.map(|index| index as usize),
@@ -373,85 +400,82 @@ impl Transcriber {
         if loaded.as_ref().map(|model| model.id.as_str()) != Some(request.model_id.as_str()) {
             // Load before overwriting: a failed load keeps the old model.
             progress(JobStage::Loading);
-            let context =
-                WhisperContext::new_with_params(&model_path, WhisperContextParameters::default())
-                    .map_err(|error| format!("could not load the model: {error}"))?;
+            let model = Model::load(&model_path)
+                .map_err(|error| format!("could not load the model: {error}"))?;
             *loaded = Some(LoadedModel {
                 id: request.model_id.clone(),
-                context,
+                model,
             });
         }
-        let context = &loaded.as_ref().expect("model loaded above").context;
-        let mut state = context
-            .create_state()
-            .map_err(|error| format!("could not start whisper: {error}"))?;
+        // Clone the handle out instead of borrowing the guard, so there is no
+        // `expect`; the guard itself stays held to keep deletes out.
+        let model = loaded
+            .as_ref()
+            .map(|loaded| loaded.model.clone())
+            .ok_or_else(|| "the transcriber has no model".to_owned())?;
 
-        let threads = std::thread::available_parallelism()
-            .map(|count| count.get().min(8))
-            .unwrap_or(4);
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_n_threads(threads as i32);
-        // The language is whisper's to hear, when it can hear more than
-        // one: a multilingual model detects it from the first window. An
-        // English-only model asked for "auto" still runs the detection,
-        // over a vocabulary it was never trained on, and "hears" Thai at
-        // one percent - so it is simply told English.
-        params.set_language(Some(if context.is_multilingual() {
-            "auto"
-        } else {
-            "en"
-        }));
-        params.set_print_special(false);
-        params.set_print_progress(false);
-        params.set_print_realtime(false);
-        params.set_print_timestamps(false);
-        params.set_suppress_blank(true);
-        // The raw hooks, not `set_abort_callback_safe`. whisper-rs 0.16's
-        // safe one hands whisper a pointer to a boxed trait object with a
-        // trampoline typed for the closure itself, so whisper reads the
-        // box's two words as the closure and the answer is whatever byte
-        // sits there: true, as a rule, and every encode was aborted before
-        // it began - "failed to encode", error -6, on the first clip. The
-        // flag itself is what whisper is given here, and it outlives the
-        // call: `cancel` is held to the end of this function.
-        // SAFETY: `abort_when_set` reads `user_data` as the `AtomicBool`
-        // inside `cancel`, which lives until `full` has returned.
-        unsafe {
-            params.set_abort_callback(Some(abort_when_set));
-            params.set_abort_callback_user_data(Arc::as_ptr(&cancel) as *mut std::ffi::c_void);
-        }
-        // Whisper calls back as it starts each window, with how far into
-        // the sound it is; the window it starts reads thirty seconds more.
-        let window = (30.0 / request.window).min(1.0) as f32;
-        progress(JobStage::Working {
-            done: 0.0,
-            next: window,
-        });
-        params.set_progress_callback_safe(move |percent: i32| {
-            let done = (percent as f32 / 100.0).clamp(0.0, 1.0);
+        let capabilities = model
+            .capabilities()
+            .map_err(|error| format!("could not read the model's capabilities: {error}"))?;
+        // An English-only model is always heard in English, whether the table
+        // says so (the `.en` builds) or its own list does.
+        let english_only = is_english_only(&request.model_id, &capabilities.languages);
+        let language = select_language(
+            request.language.as_deref(),
+            english_only,
+            &capabilities.languages,
+        )?;
+        let options = RunOptions {
+            // Ask for the finest timing the model can give, so words come
+            // back where it times them and segments always do.
+            timestamps: capabilities.max_timestamp_kind,
+            language,
+            ..RunOptions::default()
+        };
+
+        let mut session = model
+            .session()
+            .map_err(|error| format!("could not start the engine: {error}"))?;
+        let token = CancelToken::new();
+        session.set_cancel_token(&token);
+        // The engine polls this token between decode steps; the watcher turns
+        // the job's plain flag into that token and stops with the run.
+        let _watch = CancelWatch::spawn(Arc::clone(&cancel), token);
+
+        let chunks = audio_chunks(samples.len(), capabilities.max_audio_ms);
+        let total = chunks.len();
+        let mut results: Vec<(f64, transcribe_cpp::Transcript)> = Vec::with_capacity(total);
+        for (index, range) in chunks.iter().enumerate() {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("transcription cancelled".to_owned());
+            }
             progress(JobStage::Working {
-                done,
-                next: (done + window).min(1.0),
+                done: index as f32 / total as f32,
+                next: (index + 1) as f32 / total as f32,
             });
+            let transcript = session
+                .run(&samples[range.clone()], &options)
+                .map_err(|error| {
+                    if cancel.load(Ordering::Relaxed)
+                        || matches!(error, transcribe_cpp::Error::Aborted { .. })
+                    {
+                        "transcription cancelled".to_owned()
+                    } else {
+                        format!("transcription failed: {error}")
+                    }
+                })?;
+            results.push((range.start as f64 / SAMPLE_RATE as f64, transcript));
+        }
+        progress(JobStage::Working {
+            done: 1.0,
+            next: 1.0,
         });
 
-        state
-            .full(params, &samples)
-            .map_err(|error| format!("transcription failed: {error}"))?;
         if cancel.load(Ordering::Relaxed) {
             return Err("transcription cancelled".to_owned());
         }
 
-        Ok(state
-            .as_iter()
-            .filter_map(|segment| {
-                // Whisper's timestamps are centiseconds.
-                let start = segment.start_timestamp() as f64 / 100.0;
-                let end = segment.end_timestamp() as f64 / 100.0;
-                let text = segment.to_str_lossy().ok()?.trim().to_owned();
-                keep_segment(start, end, text)
-            })
-            .collect())
+        Ok(collect_segments(&results))
     }
 
     /// Asks the running transcription to stop at its next check.
@@ -465,29 +489,300 @@ impl Transcriber {
     }
 }
 
-/// Whisper marks silence and music with bracketed stage directions
+/// The engine's rate: 16 kHz mono, the one every model reads.
+const SAMPLE_RATE: usize = 16_000;
+/// Samples in a millisecond at [`SAMPLE_RATE`], for the chunk arithmetic.
+const SAMPLES_PER_MS: usize = SAMPLE_RATE / 1000;
+/// Slack under a model's audio cap for the join between pieces, in ms.
+const JOINT_MS: usize = 500;
+
+/// Sends the engine's native diagnostics into the app's `log` once.
+fn install_logging() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(transcribe_cpp::init_logging);
+}
+
+/// Whether every language the model offers is English. The `.en` whisper
+/// builds say so in the table even when the model itself lists nothing.
+fn is_english_only(id: &str, languages: &[String]) -> bool {
+    known(id).is_some_and(|model| model.english_only)
+        || (!languages.is_empty() && languages.iter().all(|code| code.starts_with("en")))
+}
+
+/// The code to hand the engine: the model's own spelling of the language it
+/// was asked for, or `None` to let it listen and decide. A model that does
+/// not know the language is a clear error, not a silent fallback.
+fn select_language(
+    requested: Option<&str>,
+    english_only: bool,
+    languages: &[String],
+) -> Result<Option<String>, String> {
+    // An English-only model always runs in English, whatever was asked for.
+    let wanted = if english_only { Some("en") } else { requested };
+    let Some(code) = wanted else {
+        return Ok(None);
+    };
+    if languages.iter().any(|known| known == code) {
+        return Ok(Some(code.to_owned()));
+    }
+    let prefix = format!("{code}-");
+    if let Some(regional) = languages.iter().find(|known| known.starts_with(&prefix)) {
+        return Ok(Some(regional.clone()));
+    }
+    // An English-only model that lists nothing still only hears English:
+    // autodetection is the safe answer, not an error.
+    if english_only && languages.is_empty() {
+        return Ok(None);
+    }
+    Err(format!(
+        "the model does not support the language {code:?} (it knows {})",
+        if languages.is_empty() {
+            "no languages".to_owned()
+        } else {
+            languages.join(", ")
+        }
+    ))
+}
+
+/// Sample ranges to transcribe: the whole buffer when the model takes it in
+/// one go, or pieces a little under its cap when it does not - the slack
+/// keeps a run from landing right on the limit.
+fn audio_chunks(total: usize, max_audio_ms: i64) -> Vec<Range<usize>> {
+    if max_audio_ms <= 0 || total == 0 {
+        return vec![0..total];
+    }
+    let limit = (max_audio_ms as u64).saturating_mul(SAMPLES_PER_MS as u64);
+    let margin = (JOINT_MS * SAMPLES_PER_MS) as u64;
+    let step = limit.saturating_sub(margin).max(1) as usize;
+    (0..total)
+        .step_by(step)
+        .map(|start| start..(start + step).min(total))
+        .collect()
+}
+
+/// Caption segments from every piece, timestamps moved onto the window, and
+/// each piece's words placed in the segment their `seg_index` names.
+fn collect_segments(chunks: &[(f64, transcribe_cpp::Transcript)]) -> Vec<Segment> {
+    let mut captions = Vec::new();
+    for (offset, transcript) in chunks {
+        for (index, segment) in transcript.segments.iter().enumerate() {
+            let start = segment.t0_ms as f64 / 1000.0 + offset;
+            let end = segment.t1_ms as f64 / 1000.0 + offset;
+            let text = segment.text.trim().to_owned();
+            let words = transcript
+                .words
+                .iter()
+                .filter(|word| word.seg_index == index as i32)
+                .map(|word| Word {
+                    start: word.t0_ms as f64 / 1000.0 + offset,
+                    end: word.t1_ms as f64 / 1000.0 + offset,
+                    text: word.text.trim().to_owned(),
+                })
+                .collect();
+            if let Some(caption) = keep_segment(start, end, text, words) {
+                captions.push(caption);
+            }
+        }
+    }
+    captions
+}
+
+/// Watches a run's cancel flag and trips the engine's token when it is set.
+/// Dropping it stops the watcher, so it outlives exactly one run.
+struct CancelWatch {
+    stop: Arc<AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl CancelWatch {
+    fn spawn(cancel: Arc<AtomicBool>, token: CancelToken) -> CancelWatch {
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread = {
+            let stop = Arc::clone(&stop);
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    if cancel.load(Ordering::Relaxed) {
+                        token.cancel();
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            })
+        };
+        CancelWatch {
+            stop,
+            thread: Some(thread),
+        }
+    }
+}
+
+impl Drop for CancelWatch {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// The engine marks silence and music with bracketed stage directions
 /// ("[BLANK_AUDIO]", "(upbeat music)"). Those are not captions, and neither
 /// is an empty or degenerate span.
-fn keep_segment(start: f64, end: f64, text: String) -> Option<Segment> {
+fn keep_segment(start: f64, end: f64, text: String, words: Vec<Word>) -> Option<Segment> {
     if text.is_empty() || (text.starts_with('[') && text.ends_with(']')) {
         return None;
     }
-    (end > start).then_some(Segment { start, end, text })
+    (end > start).then_some(Segment {
+        start,
+        end,
+        text,
+        words,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn words(codes: &[&str]) -> Vec<String> {
+        codes.iter().map(|code| (*code).to_owned()).collect()
+    }
+
     #[test]
     fn stage_directions_and_degenerate_spans_are_not_captions() {
+        let kept =
+            keep_segment(0.0, 2.5, "Hello there.".to_owned(), Vec::new()).expect("a caption");
+        assert_eq!(kept.text, "Hello there.");
+        assert!(keep_segment(2.5, 2.5, "degenerate".to_owned(), Vec::new()).is_none());
+        assert!(keep_segment(3.0, 4.0, "[BLANK_AUDIO]".to_owned(), Vec::new()).is_none());
+        assert!(keep_segment(3.0, 4.0, String::new(), Vec::new()).is_none());
+    }
+
+    #[test]
+    fn a_short_code_finds_the_models_regional_spelling() {
+        // Exact wins, then the first regional variant.
         assert_eq!(
-            keep_segment(0.0, 2.5, " Hello there.".trim().to_owned()).map(|s| s.text),
-            Some("Hello there.".to_owned())
+            select_language(Some("ru"), false, &words(&["ru", "en"])).unwrap(),
+            Some("ru".to_owned())
         );
-        assert!(keep_segment(2.5, 2.5, "degenerate".to_owned()).is_none());
-        assert!(keep_segment(3.0, 4.0, "[BLANK_AUDIO]".to_owned()).is_none());
-        assert!(keep_segment(3.0, 4.0, String::new()).is_none());
+        assert_eq!(
+            select_language(Some("ru"), false, &words(&["ru-RU", "en-US"])).unwrap(),
+            Some("ru-RU".to_owned())
+        );
+        assert_eq!(
+            select_language(Some("ru"), false, &words(&["en-US", "ru-RU"])).unwrap(),
+            Some("ru-RU".to_owned())
+        );
+        // Auto-detection stays auto-detection.
+        assert_eq!(
+            select_language(None, false, &words(&["ru-RU"])).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn an_english_only_model_always_hears_english() {
+        assert_eq!(
+            select_language(None, true, &words(&["en-US"])).unwrap(),
+            Some("en-US".to_owned())
+        );
+        assert_eq!(
+            select_language(Some("ru"), true, &words(&["en-US"])).unwrap(),
+            Some("en-US".to_owned())
+        );
+        // A list it never filled still means English: no hint is the safe ask.
+        assert_eq!(select_language(None, true, &[]).unwrap(), None);
+    }
+
+    #[test]
+    fn a_language_the_model_does_not_know_is_an_error() {
+        let error = select_language(Some("ru"), false, &words(&["en-US", "de-DE"])).unwrap_err();
+        assert!(error.contains("ru"), "{error}");
+        let empty = select_language(Some("ru"), false, &[]).unwrap_err();
+        assert!(empty.contains("no languages"), "{empty}");
+    }
+
+    #[test]
+    fn the_english_only_flag_reads_the_table_and_the_model() {
+        assert!(is_english_only("tiny.en", &[]));
+        assert!(is_english_only("", &words(&["en-US", "en-GB"])));
+        assert!(!is_english_only("base", &words(&["en", "ru"])));
+        assert!(!is_english_only("", &[]));
+    }
+
+    #[test]
+    fn a_model_without_a_cap_takes_the_whole_buffer() {
+        assert_eq!(audio_chunks(48_000, 0), vec![0..48_000]);
+        assert_eq!(audio_chunks(48_000, -1), vec![0..48_000]);
+    }
+
+    #[test]
+    fn a_capped_model_gets_pieces_under_the_cap() {
+        // Ten seconds at 16 kHz, a four-second cap: 4 s - 0.5 s of slack per
+        // piece, so three pieces of 3.5 s and a remainder.
+        let chunks = audio_chunks(160_000, 4_000);
+        assert_eq!(chunks, vec![0..56_000, 56_000..112_000, 112_000..160_000]);
+        assert!(
+            chunks
+                .iter()
+                .all(|range| range.len() <= 4_000 * SAMPLES_PER_MS)
+        );
+    }
+
+    #[test]
+    fn words_land_in_their_segment_with_shifted_times() {
+        // One piece running 1.5 s into the window: a segment at 0.0-1.0 s of
+        // the piece lands at 1.5-2.5 s of the window, its words carried along.
+        let transcript = transcribe_cpp::Transcript {
+            segments: vec![
+                transcribe_cpp::Segment {
+                    t0_ms: 0,
+                    t1_ms: 1_000,
+                    text: " Hello there.".to_owned(),
+                    ..Default::default()
+                },
+                transcribe_cpp::Segment {
+                    t0_ms: 1_000,
+                    t1_ms: 2_000,
+                    text: " Second line.".to_owned(),
+                    ..Default::default()
+                },
+            ],
+            words: vec![
+                transcribe_cpp::Word {
+                    t0_ms: 0,
+                    t1_ms: 500,
+                    seg_index: 0,
+                    text: " Hello".to_owned(),
+                    ..Default::default()
+                },
+                transcribe_cpp::Word {
+                    t0_ms: 500,
+                    t1_ms: 1_000,
+                    seg_index: 0,
+                    text: " there.".to_owned(),
+                    ..Default::default()
+                },
+                transcribe_cpp::Word {
+                    t0_ms: 1_000,
+                    t1_ms: 1_500,
+                    seg_index: 1,
+                    text: " Second".to_owned(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let captions = collect_segments(&[(1.5, transcript)]);
+        assert_eq!(captions.len(), 2);
+        assert_eq!(captions[0].text, "Hello there.");
+        assert_eq!(captions[0].start, 1.5);
+        assert_eq!(captions[0].words.len(), 2);
+        assert_eq!(captions[0].words[0].text, "Hello");
+        assert_eq!(captions[0].words[1].start, 2.0);
+        assert_eq!(captions[1].words.len(), 1);
+        assert_eq!(captions[1].words[0].text, "Second");
+        assert_eq!(captions[1].start, 2.5);
     }
 
     #[test]
@@ -521,27 +816,36 @@ mod tests {
 mod real_audio {
     use super::*;
 
-    /// The whole path through whisper on a real file with a downloaded
-    /// model - the thing the unit tests cannot cover, and what the abort
-    /// hook broke. Ignored: it wants the app's model directory and a file
-    /// named in CONCAT_TRANSCRIBE_AUDIO.
+    /// The whole path through the engine on a real file with a real model -
+    /// the thing the unit tests cannot cover. Ignored: it wants a file named
+    /// in CONCAT_TRANSCRIBE_AUDIO, and optionally a model path in
+    /// CONCAT_TRANSCRIBE_MODEL.
     ///
-    ///   CONCAT_TRANSCRIBE_AUDIO=speech.wav cargo test -p concat-speech -- --ignored real_audio
+    ///   CONCAT_TRANSCRIBE_AUDIO=speech.wav CONCAT_TRANSCRIBE_MODEL=model.gguf \
+    ///     cargo test -p concat-speech -- --ignored real_audio
     #[test]
-    #[ignore = "needs a downloaded tiny.en and CONCAT_TRANSCRIBE_AUDIO"]
+    #[ignore = "needs CONCAT_TRANSCRIBE_AUDIO and a model"]
     fn transcribes_a_file_with_the_installed_model() {
         let Ok(audio) = std::env::var("CONCAT_TRANSCRIBE_AUDIO") else {
             eprintln!("CONCAT_TRANSCRIBE_AUDIO not set; nothing to transcribe");
             return;
         };
         let dirs = AppDirs::locate().expect("the app's directories");
+        // A model named outright is not in the table, so it is left to
+        // detect the language; otherwise it is the installed tiny.en.
+        let model_id = if std::env::var_os("CONCAT_TRANSCRIBE_MODEL").is_some() {
+            String::new()
+        } else {
+            "tiny.en".to_owned()
+        };
         let transcriber = Transcriber::new();
         let request = TranscribeRequest {
             path: audio,
             audio_stream: None,
             source_start: 0.0,
             window: 30.0,
-            model_id: "tiny.en".to_owned(),
+            model_id,
+            language: None,
         };
         let segments = transcriber
             .transcribe(&dirs, &request, |stage| eprintln!("{stage:?}"))

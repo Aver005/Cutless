@@ -3,7 +3,7 @@
 
 //! Speech in and out, entirely on this machine.
 //!
-//! - [`transcribe`] - whisper.cpp, in-process, turns a clip's audio into
+//! - [`transcribe`] - transcribe.cpp, in-process, turns a clip's audio into
 //!   timed caption segments.
 //! - [`tts`] - Kokoro, through sherpa-onnx, turns typed narration into a
 //!   WAV in the project folder.
@@ -42,10 +42,10 @@ pub const fn accelerated() -> bool {
 
 /// How far a transcription or a read has got, as it reports it: the stage
 /// it is in, and in the work itself where it is and where the step under
-/// way will leave it. A job is mostly long waits between reports - whisper
-/// reports once per thirty seconds of sound, sherpa once per sentence - and
-/// `next` is what lets a bar move through the wait without promising more
-/// than the job has done.
+/// way will leave it. A job is mostly long waits between reports - a
+/// transcription reports once per piece of the window, sherpa once per
+/// sentence - and `next` is what lets a bar move through the wait without
+/// promising more than the job has done.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum JobStage {
     /// Reading the sound in: a clip's, or the recording a voice is read
