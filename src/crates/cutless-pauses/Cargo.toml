@@ -1,0 +1,15 @@
+[package]
+name = "cutless-pauses"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pause analysis: find below-threshold stretches in a clip's audio and report the spans worth cutting."
+
+[dependencies]
+concat-media.workspace = true
+thiserror.workspace = true
+log = "0.4"
+
+[lints]
+workspace = true

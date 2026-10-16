@@ -1606,6 +1606,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
+name = "cutless-pauses"
+version = "0.2.7"
+dependencies = [
+ "concat-media",
+ "log",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "daachorse"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
