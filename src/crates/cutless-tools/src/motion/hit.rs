@@ -12,12 +12,17 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::package;
+use crate::beats::{PickInput, picked};
 use crate::edit::support;
 use crate::{Registry, ToolClass, ToolContext, ToolError, ToolOutput};
 
 /// Регистрирует инструмент ударов.
 pub(super) fn register(registry: &mut Registry) {
     let kinds: Vec<&str> = HitKind::ALL.iter().map(|kind| kind.name()).collect();
+    let picks: Vec<&str> = concat_project::beats::Pick::ALL
+        .iter()
+        .map(|pick| pick.name())
+        .collect();
     support::add(
         registry,
         "hit_fx",
@@ -34,11 +39,25 @@ pub(super) fn register(registry: &mut Registry) {
             "properties": {
                 "clip_id": { "type": "string" },
                 "kind": { "type": "string", "enum": kinds },
-                "times": { "type": "array", "items": { "type": "number" }, "description": "Timeline seconds inside the clip." },
+                "times": { "type": "array", "items": { "type": "number" }, "description": "Timeline seconds inside the clip; or use `on`." },
+                "on": {
+                    "type": "object",
+                    "description": "Hit on a music clip's beat grid instead of times: moments outside the hit clip are skipped; every/offset count from the music clip's first moment in from..to.",
+                    "properties": {
+                        "clip_id": { "type": "string", "description": "The music clip with a grid (beats_analyze)." },
+                        "what": { "type": "string", "enum": picks },
+                        "from": { "type": "number" },
+                        "to": { "type": "number" },
+                        "every": { "type": "integer" },
+                        "offset": { "type": "integer" }
+                    },
+                    "required": ["clip_id", "what"],
+                    "additionalProperties": false
+                },
                 "strength": { "type": "number", "description": "0.1..3, 1 when absent." },
                 "decay": { "type": "number", "description": "Seconds the hit takes to die away, a frame..2; each kind has its own default." }
             },
-            "required": ["clip_id", "kind", "times"],
+            "required": ["clip_id", "kind"],
             "additionalProperties": false
         }),
         ToolClass::Edit,
@@ -51,7 +70,10 @@ pub(super) fn register(registry: &mut Registry) {
 struct HitInput {
     clip_id: String,
     kind: String,
-    times: Vec<f64>,
+    #[serde(default)]
+    times: Option<Vec<f64>>,
+    #[serde(default)]
+    on: Option<PickInput>,
     #[serde(default)]
     strength: Option<f64>,
     #[serde(default)]
@@ -72,13 +94,19 @@ fn hit_fx(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolErr
         )));
     }
     let param = ensure_package(ctx, kind, clip.kind)?;
+    let (times, skipped) = hit_times(
+        &view.project,
+        clip,
+        input.times.as_deref(),
+        input.on.as_ref(),
+    )?;
 
     let settings = &view.settings;
     let hits = Hits {
         clip,
         fps: settings.rate(),
         aspect: settings.aspect(),
-        times: input.times.clone(),
+        times: times.clone(),
         strength: input.strength.unwrap_or(1.0),
         decay: input.decay,
         param,
@@ -104,9 +132,14 @@ fn hit_fx(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolErr
     let mut text = format!(
         "{} x{} on {}: {keys} key(s), one undo step",
         kind.name(),
-        input.times.len(),
+        times.len(),
         input.clip_id
     );
+    if skipped > 0 {
+        text.push_str(&format!(
+            "; {skipped} moment(s) outside the clip or past the limit skipped"
+        ));
+    }
     if let Some(package) = &added {
         text.push_str(&format!("; added {package} to its chain at rest"));
     }
@@ -156,4 +189,41 @@ fn ensure_package(
         });
     }
     Ok(range.filter(|_| kind.effect().is_some()))
+}
+
+/// Больше ударов за один вызов не ставится: у каждого — ключ на каждый кадр затухания.
+const MAX_HITS: usize = 128;
+
+/// Моменты ударов: данные времена или моменты сетки внутри клипа; сколько пропущено.
+fn hit_times(
+    project: &concat_project::model::Project,
+    clip: &concat_project::model::Clip,
+    times: Option<&[f64]>,
+    on: Option<&PickInput>,
+) -> Result<(Vec<f64>, usize), ToolError> {
+    let all = match (times, on) {
+        (Some(times), None) => return Ok((times.to_vec(), 0)),
+        (None, Some(on)) => picked(project, on)?,
+        _ => {
+            return Err(ToolError::BadInput(
+                "give exactly one of times or on".to_owned(),
+            ));
+        }
+    };
+    let total = all.len();
+    let end = clip.start + clip.duration;
+    let inside: Vec<f64> = all
+        .into_iter()
+        .filter(|time| *time >= clip.start && *time <= end)
+        .take(MAX_HITS)
+        .collect();
+    if inside.is_empty() {
+        return Err(ToolError::BadInput(format!(
+            "none of the {total} moment(s) fall inside {} ({}-{})",
+            clip.id,
+            support::time(clip.start),
+            support::time(end)
+        )));
+    }
+    Ok((inside.clone(), total - inside.len()))
 }

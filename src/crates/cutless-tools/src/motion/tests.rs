@@ -37,6 +37,7 @@ impl Fixture {
         let mut registry = Registry::default();
         crate::edit::register(&mut registry);
         super::register(&mut registry);
+        crate::beats::register(&mut registry);
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
@@ -436,4 +437,109 @@ fn a_layer_hit_moves_its_camera_and_enums_take_no_keys() {
         )
         .expect_err("an enum holds still");
     assert!(matches!(error, ToolError::BadInput(_)), "{error:?}");
+}
+
+/// WAV 16 кГц моно: бочка на каждой доле 128 BPM, первая на 0,2 с, `seconds` секунд.
+fn click_track(path: &std::path::Path, seconds: f64) {
+    let rate = 16_000u32;
+    let total = (seconds * f64::from(rate)) as usize;
+    let beat = 60.0 / 128.0;
+    let mut samples = vec![0i16; total];
+    let mut time = 0.2;
+    while time < seconds {
+        let start = (time * f64::from(rate)) as usize;
+        let mut phase = 0.0_f64;
+        for n in 0..(0.25 * f64::from(rate)) as usize {
+            let t = n as f64 / f64::from(rate);
+            phase +=
+                2.0 * std::f64::consts::PI * (50.0 + 100.0 * (-t / 0.03).exp()) / f64::from(rate);
+            if let Some(sample) = samples.get_mut(start + n) {
+                *sample = (20_000.0 * (-t / 0.06).exp() * phase.sin()) as i16;
+            }
+        }
+        time += beat;
+    }
+    let data: Vec<u8> = samples
+        .iter()
+        .flat_map(|sample| sample.to_le_bytes())
+        .collect();
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&rate.to_le_bytes());
+    wav.extend_from_slice(&(rate * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    wav.extend_from_slice(&data);
+    std::fs::write(path, wav).expect("a wav");
+}
+
+#[test]
+fn a_music_clip_gets_a_grid_and_hits_land_on_its_kicks() {
+    let mut fixture = Fixture::new("beats");
+    let wav = std::env::temp_dir().join(format!("cutless-beats-{}.wav", std::process::id()));
+    click_track(&wav, 20.0);
+    let imported = fixture
+        .call("media_import", json!({ "file": wav.to_string_lossy() }))
+        .expect("import");
+    let media_id = imported
+        .text
+        .split_whitespace()
+        .last()
+        .expect("an id")
+        .to_owned();
+    let music = fixture
+        .call("clip_add", json!({ "media_id": media_id, "start": 0.0 }))
+        .expect("music")
+        .data["createdId"]
+        .as_str()
+        .expect("id")
+        .to_owned();
+
+    let found = fixture
+        .call(
+            "beats_analyze",
+            json!({ "clip_id": music, "wait_seconds": 45 }),
+        )
+        .expect("a grid");
+    assert!(found.text.contains("128.0"), "{}", found.text);
+    let again = fixture
+        .call("beats_analyze", json!({ "clip_id": music }))
+        .expect("stored");
+    assert!(again.text.starts_with("stored"), "{}", again.text);
+
+    let bars = fixture
+        .call(
+            "beats_get",
+            json!({ "clip_id": music, "what": "bars", "to": 8.0 }),
+        )
+        .expect("bars");
+    // Бочка на каждой доле: какая из них сильная — неизвестно, но такт — ровно четыре доли.
+    let first = bars.data["times"][0].as_f64().expect("a bar");
+    let second = bars.data["times"][1].as_f64().expect("a second bar");
+    assert!(
+        (second - first - 4.0 * 60.0 / 128.0).abs() < 0.01,
+        "{}",
+        bars.text
+    );
+
+    let video = fixture.clip.clone();
+    let hit = fixture
+        .call(
+            "hit_fx",
+            json!({ "clip_id": video, "kind": "punch", "on": { "clip_id": music, "what": "kicks", "every": 4 } }),
+        )
+        .expect("hits on kicks");
+    assert!(hit.text.contains("punch x"), "{}", hit.text);
+    let summary = fixture
+        .call("timeline_summary", json!({}))
+        .expect("summary");
+    assert!(summary.text.contains("beats 128"), "{}", summary.text);
+    let _ = std::fs::remove_file(&wav);
 }

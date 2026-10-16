@@ -11,6 +11,7 @@ concat-api.workspace = true
 concat-project.workspace = true
 concat-host.workspace = true
 concat-speech.workspace = true
+cutless-beats = { path = "../cutless-beats" }
 cutless-motion = { path = "../cutless-motion" }
 cutless-pauses = { path = "../cutless-pauses" }
 serde = { version = "1", features = ["derive"] }

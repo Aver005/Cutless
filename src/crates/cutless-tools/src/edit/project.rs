@@ -395,6 +395,7 @@ fn summary(view: &View) -> String {
         clips.sort_by(|left, right| left.start.total_cmp(&right.start));
         for clip in clips {
             out.push_str(&clip_line(clip, &media));
+            out.push_str(&beats_mark(&view.project, clip));
             out.push('\n');
         }
     }
@@ -497,6 +498,22 @@ fn clip_line(clip: &Clip, media: &BTreeMap<String, String>) -> String {
         line.push_str("  cutless.pause");
     }
     line
+}
+
+/// Метка сетки долей у клипа, чей звук разобран: темп и первый такт под ним.
+fn beats_mark(project: &Project, clip: &Clip) -> String {
+    let Some(grid) = project
+        .media_by_id(&clip.media_id)
+        .and_then(|media| concat_project::beats::grid(media, clip.audio_stream))
+    else {
+        return String::new();
+    };
+    let bars =
+        concat_project::beats::timeline_picks(&grid, clip, concat_project::beats::Pick::Bars);
+    let first = bars
+        .first()
+        .map_or("-".to_owned(), |time| support::time(*time));
+    format!("  beats {}bpm bar@{first}", support::num(grid.bpm))
 }
 
 /// Ключи свойств клипа: сколько и где, `scale×32@00:12.300-00:13.333`.

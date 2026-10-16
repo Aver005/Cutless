@@ -7,6 +7,7 @@
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+pub mod beats;
 pub mod edit;
 pub mod jobs;
 pub mod motion;
@@ -203,6 +204,7 @@ pub fn default_registry() -> Registry {
     let mut registry = Registry::default();
     edit::register(&mut registry);
     jobs::register(&mut registry);
+    beats::register(&mut registry);
     motion::register(&mut registry);
     speech::register(&mut registry);
     pauses::register(&mut registry);

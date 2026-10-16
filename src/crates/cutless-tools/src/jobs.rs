@@ -38,6 +38,8 @@ pub fn wait_from(seconds: Option<f64>) -> Duration {
 pub enum JobKind {
     /// Распознавание речи клипа.
     Transcribe,
+    /// Сетка долей трека.
+    Beats,
     /// Экспорт таймлайна в файл.
     Export,
 }
@@ -47,6 +49,7 @@ impl JobKind {
     pub fn as_str(self) -> &'static str {
         match self {
             JobKind::Transcribe => "transcribe",
+            JobKind::Beats => "beats",
             JobKind::Export => "export",
         }
     }
@@ -340,6 +343,17 @@ impl Jobs {
             .cloned()
     }
 
+    /// Последняя задача этого вида о том же предмете, в каком бы состоянии она ни была.
+    pub fn latest_for(&self, kind: JobKind, subject: &str) -> Option<Job> {
+        self.board()
+            .entries
+            .iter()
+            .rev()
+            .map(|entry| &entry.job)
+            .find(|job| job.kind == kind && job.subject == subject)
+            .cloned()
+    }
+
     /// Ждёт конца задачи не дольше `timeout`; отдаёт её снимок, каким бы он ни был.
     pub fn wait(&self, id: &str, timeout: Duration) -> Option<Job> {
         let deadline = Instant::now() + timeout;
@@ -437,6 +451,7 @@ impl Jobs {
 fn kind_prefix(kind: JobKind) -> &'static str {
     match kind {
         JobKind::Transcribe => "t",
+        JobKind::Beats => "b",
         JobKind::Export => "x",
     }
 }

@@ -127,7 +127,7 @@ impl Tool for JobCancel {
                     job: job.id.clone(),
                 })?;
             }
-            JobKind::Transcribe => ctx.jobs.cancel(&job.id)?,
+            JobKind::Transcribe | JobKind::Beats => ctx.jobs.cancel(&job.id)?,
         }
         Ok(ToolOutput::text(format!(
             "Asked job {} to stop; job_status shows when it has.",
