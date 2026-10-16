@@ -1,0 +1,21 @@
+[package]
+name = "cutless-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Cutless: an MCP server over the tool registry, so any agent on stdio can open a project and edit it."
+
+[dependencies]
+cutless-tools = { path = "../cutless-tools" }
+concat-api.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+log = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

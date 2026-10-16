@@ -12,7 +12,8 @@
 //! `preview` draws one effect's card the way the window draws the
 //! catalogue's: a still through the package's own shader on the GPU. `check` is what an author runs on
 //! an effect package before sharing it: the same load the window does, its
-//! fixtures, and its probes on the GPU, with every fault named.
+//! fixtures, and its probes on the GPU, with every fault named. `mcp` serves
+//! the Cutless tool registry to an agent over stdin and stdout.
 
 use std::error::Error;
 use std::io::{BufRead, Write};
@@ -120,6 +121,11 @@ enum Command {
         /// A package folder, or a folder of package folders.
         path: PathBuf,
     },
+
+    /// Serve the Cutless tool registry to an agent as a Model Context
+    /// Protocol server: one JSON-RPC 2.0 message per line on stdin and
+    /// stdout, with stdout kept for the protocol alone and logs on stderr.
+    Mcp,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -150,6 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             height,
         } => preview(&input, &output, &effect, width, height),
         Command::Check { path } => check(&path),
+        Command::Mcp => mcp(),
     }
 }
 
@@ -191,6 +198,15 @@ fn emit(message: &Message) {
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{}", message.to_json());
     let _ = out.flush();
+}
+
+/// The MCP transport: the Cutless tool registry served to an agent as a
+/// stdio Model Context Protocol server, until stdin ends. Everything the
+/// API raises on a job's thread goes to the log, never to stdout.
+fn mcp() -> Result<(), Box<dyn Error>> {
+    let mut server = cutless_mcp::McpServer::with_default_registry()?;
+    server.serve(std::io::stdin().lock(), std::io::stdout().lock())?;
+    Ok(())
 }
 
 /// The socket transports, until the process is stopped. Where they listen

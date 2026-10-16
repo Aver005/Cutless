@@ -19,6 +19,8 @@ concat-render.workspace = true
 # command: the same on a socket.
 concat-api.workspace = true
 concat-server.workspace = true
+# The `mcp` command: the Cutless tool registry served to an agent over stdio.
+cutless-mcp = { path = "../cutless-mcp" }
 serde_json.workspace = true
 # `preview` draws one effect's card, as the window does; `check` loads
 # packages and runs their probes.
