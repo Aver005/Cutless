@@ -1,5 +1,5 @@
 # AI-LAYER — проект ИИ-слоя Cutless
-> Целевая схема, инструменты, мост к окну, встроенный агент, ACP. Last updated: 2026-10-16 (проект, кода нет).
+> Целевая схема, инструменты, мост к окну, встроенный агент, ACP. Last updated: 2026-10-16 (Ф2: реестр и MCP по stdio работают).
 
 Это проект, а не описание существующего кода. Решения, на которых он стоит, — `DECISIONS.md`
 (раздел «ИИ-слой»). Фазы — `PLANS.md` Ф2–Ф4, Ф7.
@@ -74,7 +74,24 @@
   сводку, взять другую дорожку).
 - **Вход проверяется по схеме до вызова.**
 
-### Набор первой волны (Ф2.5–Ф2.8)
+### Что уже есть (2026-10-16)
+
+36 инструментов в `src/crates/cutless-tools` (`default_registry()`), имена и поля входа — snake_case:
+
+| Группа | Инструменты |
+|---|---|
+| Проект | `project_open`, `project_create`, `project_save`, `project_settings`, `timeline_summary`, `clip_detail`, `undo`, `redo` |
+| Медиа | `media_import`, `media_list` |
+| Монтаж | `clips_split`, `clip_trim`, `clips_move`, `clips_remove`, `clip_add`, `clip_volume`, `clip_transform` |
+| Текст | `text_add`, `text_update`, `text_style_track` |
+| Эффекты | `effects_catalogue`, `effect_apply`, `effect_remove` |
+| Глаза и выход | `frame_at`, `export_start` |
+| Речь | `speech_models`, `transcribe`, `transcript_get`, `transcript_search`, `captions_make` |
+| Паузы и звук | `pauses_analyze`, `pauses_mark`, `pauses_list`, `pauses_restore`, `pauses_confirm`, `audio_clean` |
+
+Сквозная проверка — `scripts/cutless/mcp-smoke.py --speech речь.wav` (нужен `concat-cli` профиля quick).
+
+### Набор первой волны (Ф2.5–Ф2.8), план
 
 | Группа | Инструменты |
 |---|---|
@@ -118,6 +135,8 @@ lint: 1 warning — c7 text 24 chars/2.8s = 8.6 cps ok; c2 outside safe zone? no
 ## 4. MCP (`cutless-mcp`)
 
 - Транспорт: сначала stdio (`concat-cli mcp`), затем HTTP на том же `Hub`.
+- Подключение: Claude Code — `claude mcp add cutless -- <путь>\concat-cli.exe mcp`; pooprusteek — `/mcp add`
+  с той же командой. Ошибка инструмента — результат с `isError: true`, не ошибка JSON-RPC.
 - `tools/list` отдаёт реестр; `tools/call` вызывает обработчик.
 - Картинки (`frame_at`, `contact_sheet`) уходят как MCP image content и **дублируются текстом**
   (время, размер, путь к файлу). MCP-клиент pooprusteek сводит картинку к `[Image: mime]`.
