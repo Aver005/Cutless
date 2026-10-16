@@ -55,6 +55,7 @@ pub fn caption_lines(segments: &[Segment], rules: &LineRules) -> Vec<CaptionLine
         let words = segment_words(segment);
         lines.extend(group_words(&words, rules));
     }
+    trim_overlaps(&mut lines);
     stretch_short(&mut lines, rules);
     lines
 }
@@ -63,7 +64,13 @@ pub fn caption_lines(segments: &[Segment], rules: &LineRules) -> Vec<CaptionLine
 /// сегмента поровну — так работает модель без покадровых таймкодов.
 fn segment_words(segment: &Segment) -> Vec<Word> {
     if !segment.words.is_empty() {
-        return segment.words.clone();
+        // Пустой токен модели дал бы пустой титр.
+        return segment
+            .words
+            .iter()
+            .filter(|word| !word.text.trim().is_empty())
+            .cloned()
+            .collect();
     }
     let tokens: Vec<&str> = segment.text.split_whitespace().collect();
     let count = tokens.len();
@@ -157,6 +164,18 @@ fn ends_with(text: &str, test: impl Fn(char) -> bool) -> bool {
         .chars()
         .last()
         .is_some_and(test)
+}
+
+/// Обрезает конец титра по началу следующего: таймкоды соседних слов у
+/// модели бывают внахлёст, а титры не должны лечь на две дорожки.
+fn trim_overlaps(lines: &mut [CaptionLine]) {
+    for index in 1..lines.len() {
+        let next_start = lines[index].start;
+        let line = &mut lines[index - 1];
+        if line.end > next_start {
+            line.end = next_start.max(line.start);
+        }
+    }
 }
 
 /// Растягивает слишком короткие титры до минимума, но не дальше начала
@@ -303,6 +322,27 @@ mod tests {
         assert_eq!(texts(&lines), ["oh no.", "stop"]);
         assert!((lines[0].end - 0.5).abs() < 1e-9, "{:?}", lines[0]);
         assert!(lines[0].end <= lines[1].start);
+    }
+
+    /// Слова внахлёст не дают титрам наложиться, пустой токен не даёт титра.
+    #[test]
+    fn overlapping_words_and_blank_tokens_keep_captions_apart() {
+        let lines = caption_lines(
+            &[segment(
+                "first one. second",
+                0.0,
+                3.0,
+                vec![
+                    word("first", 0.0, 0.5),
+                    word("one.", 0.5, 1.4),
+                    word("second", 1.3, 2.0),
+                    word(" ", 2.0, 2.6),
+                ],
+            )],
+            &LineRules::default(),
+        );
+        assert_eq!(texts(&lines), ["first one.", "second"]);
+        assert!(lines[0].end <= lines[1].start, "{lines:?}");
     }
 
     /// Сегмент без слов режется по времени, а текст сохраняется по словам.
