@@ -1,0 +1,251 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Cutless contributors
+
+import { I18n } from "../i18n.slint";
+import { Theme } from "../theme/theme.slint";
+import { Glyph, Icon } from "../icons.slint";
+import { Button, DialogRow, DialogSection, Modal } from "../primitives/modal.slint";
+import { SegmentedControl } from "../primitives/segmented-control.slint";
+import { NumberField } from "../primitives/number-field.slint";
+import { Editor } from "../editor.slint";
+
+// Паузы: окно параметров разметки, полоса над таймлайном и режим плеера.
+//
+// Окно ничего не удаляет: «Разметить» режет клип по тихим отрезкам и
+// помечает куски. Полоса показывает, сколько помечено, и держит два глагола
+// — подтвердить всё одним шагом undo или вернуть всё обратно. Переключатель
+// в панели превью выбирает, играет ли плеер помеченное или перепрыгивает.
+
+/// Состояние окна пауз, как его публикует Rust.
+export struct PausesSheetData {
+    open: bool,
+    /// Порог считается из звука, иначе задан вручную.
+    threshold-auto: bool,
+    /// Ручной порог тишины, дБ.
+    threshold-db: float,
+    /// Минимальная длина паузы, с.
+    min-pause: float,
+    /// Отступ по краям паузы, с.
+    padding: float,
+    running: bool,
+    /// Почему последний запуск не удался.
+    message: string,
+    /// Сколько клипов можно разметить прямо сейчас.
+    available: int,
+}
+
+/// Итог разметки для полосы над таймлайном.
+export global PausesState {
+    /// Есть помеченные куски, которые стоит показать.
+    in property <bool> open;
+    /// Сколько кусков помечено.
+    in property <int> count;
+    /// Сколько секунд таймлайна они занимают, с запятой.
+    in property <string> total;
+}
+
+/// Режим плеера: помеченные отрезки перепрыгиваются.
+export global PauseMode {
+    in-out property <bool> skip;
+}
+
+// Полоса над таймлайном: немодальная, живёт, пока на таймлайне есть
+// помеченные куски. Её глаголы идут через те же shortcut-ключи, что и окно.
+export component PausesBar inherits Rectangle {
+    property <bool> open: PausesState.open;
+
+    height: root.open ? 34px : 0px;
+    visible: root.open;
+    background: Theme.danger-soft;
+
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: Theme.danger-edge;
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: center;
+            Icon { glyph: Glyph.pause; size: 14px; tint: Theme.danger; }
+        }
+
+        Text {
+            text: I18n.t2("pauses.summary", "\{(PausesState.count)}", PausesState.total);
+            color: Theme.fg;
+            font-size: Theme.fs;
+            vertical-alignment: center;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        VerticalLayout {
+            alignment: center;
+            Button {
+                label: I18n.t("pauses.confirmAll");
+                glyph: Glyph.check;
+                primary: true;
+                clicked => { Editor.shortcut("pauses-confirm"); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                label: I18n.t("pauses.restoreAll");
+                glyph: Glyph.undo;
+                clicked => { Editor.shortcut("pauses-restore"); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                label: I18n.t("pauses.close");
+                ghost: true;
+                clicked => { Editor.shortcut("pauses-close"); }
+            }
+        }
+    }
+}
+
+// Окно параметров разметки: порог, минимальная пауза, отступ и «Разметить».
+export component PausesDialog inherits Modal {
+    in property <PausesSheetData> data;
+
+    callback auto-toggled(on: bool);
+    callback threshold-changed(value: float);
+    callback min-pause-changed(value: float);
+    callback padding-changed(value: float);
+    callback begin();
+
+    open: root.data.open;
+    title: I18n.t("pauses.pauses");
+    glyph: Glyph.pause;
+    surface-width: 460px;
+    dismissable: !root.data.running;
+
+    VerticalLayout {
+        DialogSection {
+            first: true;
+            title: I18n.t("pauses.pauses");
+
+            DialogRow {
+                label: I18n.t("pauses.threshold");
+                SegmentedControl {
+                    options: [I18n.t("pauses.auto"), I18n.t("pauses.manual")];
+                    current: root.data.threshold-auto ? 0 : 1;
+                    changed(index) => { root.auto-toggled(index == 0); }
+                }
+            }
+
+            DialogRow {
+                label: I18n.t("pauses.thresholdDb");
+                NumberField {
+                    width: 110px;
+                    value: root.data.threshold-db;
+                    minimum: -80;
+                    maximum: 0;
+                    step: 1;
+                    precision: 1;
+                    unit: "dB";
+                    enabled: !root.data.threshold-auto && !root.data.running;
+                    changed(value) => { root.threshold-changed(value); }
+                }
+            }
+
+            DialogRow {
+                label: I18n.t("pauses.minimumPause");
+                NumberField {
+                    width: 110px;
+                    value: root.data.min-pause;
+                    minimum: 0;
+                    maximum: 10;
+                    step: 0.1;
+                    precision: 2;
+                    unit: "s";
+                    enabled: !root.data.running;
+                    changed(value) => { root.min-pause-changed(value); }
+                }
+            }
+
+            DialogRow {
+                label: I18n.t("pauses.padding");
+                NumberField {
+                    width: 110px;
+                    value: root.data.padding;
+                    minimum: 0;
+                    maximum: 5;
+                    step: 0.1;
+                    precision: 2;
+                    unit: "s";
+                    enabled: !root.data.running;
+                    changed(value) => { root.padding-changed(value); }
+                }
+            }
+
+            Text {
+                text: root.data.threshold-auto
+                    ? I18n.t("pauses.autoHint")
+                    : I18n.t("pauses.manualHint");
+                color: Theme.fg-dim;
+                font-size: Theme.fs-sm;
+                wrap: word-wrap;
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.line;
+        }
+
+        VerticalLayout {
+            padding: 14px;
+            spacing: 10px;
+
+            if root.data.message != "": Rectangle {
+                border-radius: Theme.r;
+                background: Theme.danger-soft;
+
+                HorizontalLayout {
+                    padding: 10px;
+                    spacing: 8px;
+
+                    VerticalLayout {
+                        alignment: start;
+                        Icon { glyph: Glyph.close; size: 13px; tint: Theme.danger; }
+                    }
+
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.data.message;
+                        color: Theme.danger;
+                        font-size: Theme.fs-sm;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            Text {
+                text: I18n.t("pauses.explain");
+                color: Theme.fg-dim;
+                font-size: Theme.fs-sm;
+                wrap: word-wrap;
+            }
+
+            Button {
+                block: true;
+                primary: true;
+                large: true;
+                glyph: Glyph.pause;
+                label: root.data.running ? I18n.t("pauses.analysing") : I18n.t("pauses.mark");
+                enabled: !root.data.running && root.data.available > 0;
+                clicked => { root.begin(); }
+            }
+        }
+    }
+}

@@ -493,6 +493,34 @@ component Clip inherits Rectangle {
         }
     }
 
+    // ── pause ────────────────────────────────────────────────────────────
+    //
+    // A marked piece wears a red veil, a red outline and a stroke across it.
+    // Childless rectangles and one vector path: an `opacity` or a layer here
+    // would be an offscreen texture the width of the clip, and a long clip
+    // is past the GPU's limit; see the note on the element.
+    if root.item.pause: Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        border-radius: Theme.r-sm;
+        background: Theme.danger-soft;
+    }
+
+    if root.item.pause: Path {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 1;
+        viewbox-height: 1;
+        fit: fill;
+        stroke: Theme.danger;
+        stroke-width: 1.5px;
+        commands: "M 0 0 L 1 1";
+    }
+
     // ── outline ──────────────────────────────────────────────────────────
     //
     // Over the children, because they are over it: the header and the
@@ -504,8 +532,9 @@ component Clip inherits Rectangle {
         width: parent.width;
         height: parent.height;
         border-radius: Theme.r-sm;
-        border-width: root.item.selected ? 2px : 1px;
-        border-color: root.item.selected ? Theme.accent : root.mark;
+        border-width: (root.item.selected || root.item.pause) ? 2px : 1px;
+        border-color: root.item.pause ? Theme.danger
+            : root.item.selected ? Theme.accent : root.mark;
     }
 
     // ── locked ───────────────────────────────────────────────────────────

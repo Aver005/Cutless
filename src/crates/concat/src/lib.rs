@@ -86,6 +86,7 @@ use panes::captions::CaptionsMsg;
 use panes::export::ExportMsg;
 use panes::media_bin::MediaMsg;
 use panes::monitor::MonitorMsg;
+use panes::pauses::PausesMsg;
 use panes::project::ProjectMsg;
 use panes::relink::RelinkMsg;
 use panes::settings::SettingsMsg;
@@ -1733,6 +1734,26 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     app.on_speech_cancel(on_window!(|state| {
         state.handle(Msg::Speech(SpeechMsg::Cancel));
+    }));
+
+    // ── the pauses sheet ──
+    app.on_pauses_closed(on_window!(|state| {
+        state.handle(Msg::Pauses(PausesMsg::Close));
+    }));
+    app.on_pauses_auto_toggled(on_window!(|state, on: bool| {
+        state.handle(Msg::Pauses(PausesMsg::ThresholdAutoToggled(on)));
+    }));
+    app.on_pauses_threshold_changed(on_window!(|state, value: f32| {
+        state.handle(Msg::Pauses(PausesMsg::ThresholdChanged(f64::from(value))));
+    }));
+    app.on_pauses_min_pause_changed(on_window!(|state, value: f32| {
+        state.handle(Msg::Pauses(PausesMsg::MinPauseChanged(f64::from(value))));
+    }));
+    app.on_pauses_padding_changed(on_window!(|state, value: f32| {
+        state.handle(Msg::Pauses(PausesMsg::PaddingChanged(f64::from(value))));
+    }));
+    app.on_pauses_begin(on_window!(|state| {
+        state.handle(Msg::Pauses(PausesMsg::Begin));
     }));
 
     // ── the title-bar menus ──

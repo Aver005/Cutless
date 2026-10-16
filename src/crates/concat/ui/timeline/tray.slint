@@ -6,6 +6,8 @@ import { Theme } from "../theme/theme.slint";
 import { Glyph, Icon } from "../icons.slint";
 import { IconButton } from "../primitives/panel.slint";
 import { LevelMeter } from "../primitives/level-meter.slint";
+import { PausesBar, PausesState } from "../dialogs/pauses.slint";
+import { Editor } from "../editor.slint";
 import { TimelineTool } from "model.slint";
 
 // The timeline's tool tray.
@@ -209,8 +211,17 @@ export component TimelineTray inherits Rectangle {
     callback fit();
     callback zoom(factor: float);
 
-    height: 40px;
+    height: PausesState.open ? 40px + 34px : 40px;
     background: Theme.panel;
+
+    // The pauses bar, above the buttons: it appears on its own while the
+    // timeline carries marked pieces, and takes no room when it does not.
+    // Its verbs go straight to the editor; see PausesBar.
+    PausesBar {
+        x: 0;
+        y: 0;
+        width: parent.width;
+    }
 
     Rectangle {
         x: 0;
@@ -221,6 +232,9 @@ export component TimelineTray inherits Rectangle {
     }
 
     HorizontalLayout {
+        y: PausesState.open ? 34px : 0px;
+        width: parent.width;
+        height: root.height - (PausesState.open ? 34px : 0px);
         padding-left: 8px;
         padding-right: 8px;
         padding-top: 7px;
@@ -375,6 +389,12 @@ export component TimelineTray inherits Rectangle {
             label: I18n.t("tray.generateCaptions");
             icon-size: 16px;
             clicked => { root.captions(); }
+        }
+        TrayButton {
+            glyph: Glyph.pause;
+            label: I18n.t("tray.findPauses");
+            icon-size: 16px;
+            clicked => { Editor.shortcut("pauses"); }
         }
         TrayButton {
             glyph: Glyph.volume;
