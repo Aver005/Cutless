@@ -19,6 +19,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const BUSY_RETRIES: usize = 20;
 /// Пауза между повторами при `busy`.
 const BUSY_PAUSE: Duration = Duration::from_millis(250);
+/// Сколько ждём ответа на запрос: окно само ждёт свой поток до 30 с.
+const REPLY_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Редактор, который правит проект через открытое окно Cutless.
 pub struct RemoteEditor {
@@ -58,7 +60,7 @@ impl RemoteEditor {
         editor
             .exchange(&line, id)
             .map_err(|error| McpError::Connect(error.to_string()))?;
-        let _ = editor.writer.set_read_timeout(None);
+        let _ = editor.writer.set_read_timeout(Some(REPLY_TIMEOUT));
         Ok(editor)
     }
 
@@ -267,6 +269,8 @@ mod tests {
             .dispatch(Request::EditUndo { path: "/p".into() })
             .expect("call");
         assert_eq!(value["canUndo"], true);
+        // Сервер читает, пока клиент не отключится.
+        drop(editor);
         handle.join().expect("server");
     }
 
@@ -284,6 +288,8 @@ mod tests {
             .expect_err("refused");
         assert_eq!(error.code, ErrorCode::NotOpen);
         assert_eq!(error.message, "/p is not open");
+        // Сервер читает, пока клиент не отключится.
+        drop(editor);
         handle.join().expect("server");
     }
 
@@ -307,6 +313,8 @@ mod tests {
             .expect("retried");
         assert_eq!(value["canUndo"], false);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+        // Сервер читает, пока клиент не отключится.
+        drop(editor);
         handle.join().expect("server");
     }
 
@@ -324,6 +332,8 @@ mod tests {
             .dispatch(Request::EditUndo { path: "/p".into() })
             .expect_err("closed");
         assert!(error.message.contains("window closed"), "{}", error.message);
+        // Сервер читает, пока клиент не отключится.
+        drop(editor);
         handle.join().expect("server");
     }
 

@@ -129,6 +129,8 @@ impl McpServer {
                 output.flush()?;
             }
         }
+        // Экспорт, начатый последней строкой, дописывается до выхода.
+        self.editor.finish();
         Ok(())
     }
 

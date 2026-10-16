@@ -15,11 +15,18 @@ pub mod speech;
 pub trait Editor {
     /// Выполняет один запрос API: ответ как JSON или ошибка API.
     fn dispatch(&mut self, request: concat_api::Request) -> Result<Value, concat_api::ApiError>;
+
+    /// Дожидается своих фоновых задач (экспорта) перед выходом.
+    fn finish(&mut self) {}
 }
 
 impl Editor for concat_api::Api {
     fn dispatch(&mut self, request: concat_api::Request) -> Result<Value, concat_api::ApiError> {
         answer(concat_api::Api::dispatch(self, request))
+    }
+
+    fn finish(&mut self) {
+        concat_api::Api::finish(self);
     }
 }
 
