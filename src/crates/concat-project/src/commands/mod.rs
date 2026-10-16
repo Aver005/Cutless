@@ -22,6 +22,7 @@ mod audio;
 mod clips;
 pub use clips::why_not_merge;
 mod media;
+pub mod pauses;
 mod properties;
 mod timelines;
 mod tracks;
@@ -725,6 +726,40 @@ pub enum Command {
         /// own tag.
         range: Option<ColorRange>,
     },
+    /// Marks the pieces of a clip that fall inside each range as pauses,
+    /// cutting the clip at every range edge first. Ranges are in timeline
+    /// seconds and are clamped to the clip; a piece is a pause when its
+    /// span lies inside a range. The clip's detached sound is cut and
+    /// marked the same way. One undo step.
+    MarkPauses {
+        /// The clip to mark. An unknown id is a no-op.
+        clip_id: String,
+        /// Pause ranges in timeline seconds.
+        ranges: Vec<pauses::PauseRange>,
+    },
+    /// Sets or clears the pause mark on clips, without cutting anything.
+    SetClipPause {
+        /// The clips to mark or unmark. Unknown ids are ignored.
+        clip_ids: Vec<String>,
+        /// True to mark, false to unmark.
+        on: bool,
+    },
+    /// Clears the pause mark and joins each named piece back with the
+    /// neighbours it continues, when they touch and share the file. A
+    /// neighbour that is itself an unmarked pause stops the join.
+    RestorePauses {
+        /// The pieces to restore. Unknown ids are ignored.
+        clip_ids: Vec<String>,
+    },
+    /// Removes the marked pieces and closes the gaps they leave, on every
+    /// track but the music. A clip fully inside a removed span goes with
+    /// it, one that partly overlaps is shortened, and one after the span
+    /// moves left. None means every marked piece on the active timeline.
+    /// One undo step.
+    ConfirmPauses {
+        /// The pieces to confirm; None for all marked on the active timeline.
+        clip_ids: Option<Vec<String>>,
+    },
 }
 
 /// What a command produced, beyond the new state: the ids it minted, so the
@@ -1105,5 +1140,9 @@ pub fn apply(
         | Command::RenameTimeline { .. }
         | Command::SelectTimeline { .. }
         | Command::MoveTimeline { .. }) => timelines::apply(project, mint, command),
+        command @ (Command::MarkPauses { .. }
+        | Command::SetClipPause { .. }
+        | Command::RestorePauses { .. }
+        | Command::ConfirmPauses { .. }) => pauses::apply(project, mint, command),
     }
 }
