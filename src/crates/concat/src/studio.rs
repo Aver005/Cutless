@@ -39,6 +39,7 @@ use concat_host::{
 };
 use concat_media::{Pyramid, jpeg};
 use concat_project::Command;
+use concat_project::commands::links::{link_of, with_linked};
 use concat_project::commands::pauses::is_pause;
 use concat_project::commands::{ClipMove, ClipPatch, TrackFlag, TrimEdge};
 use concat_project::model::{
@@ -368,6 +369,14 @@ pub struct MoveOrigin {
     pub row: i32,
 }
 
+/// Один клип в обрезке группы: где его край стоял до жеста.
+pub struct TrimMate {
+    pub clip: String,
+    pub start: f32,
+    pub duration: f32,
+    pub source_start: f32,
+}
+
 /// A pointer gesture in flight, previewed on the echo.
 pub enum Gesture {
     None,
@@ -386,6 +395,8 @@ pub enum Gesture {
         start: f32,
         duration: f32,
         source_start: f32,
+        /// Клипы группы, чей совпадающий край едет вместе с тянутым.
+        mates: Vec<TrimMate>,
     },
     /// Dragging a transition's duration handle on the timeline.
     TransitionResize {
@@ -4677,7 +4688,7 @@ impl Studio {
 
     /// A press resolves the selection before anything moves, so a drag that
     /// starts on an already-selected clip carries the whole set.
-    pub fn clip_pressed(&mut self, id: &str, additive: bool, edge: i32) {
+    pub fn clip_pressed(&mut self, id: &str, additive: bool, alt: bool, edge: i32) {
         let Some(clip) = self.clip(id).cloned() else {
             return;
         };
@@ -4713,7 +4724,10 @@ impl Studio {
         }
         self.transition_selected = None;
         let already = self.selection.iter().any(|held| held == id);
-        self.selection = if additive {
+        // Alt takes the clip alone; a plain click takes its whole group.
+        self.selection = if alt {
+            vec![id.to_owned()]
+        } else if additive {
             if already {
                 self.selection
                     .iter()
@@ -4723,35 +4737,47 @@ impl Studio {
             } else {
                 let mut next = self.selection.clone();
                 next.push(id.to_owned());
-                next
+                grouped_action(self.timeline(), &next, false)
             }
         } else if already {
             self.selection.clone()
         } else {
-            vec![id.to_owned()]
+            grouped_action(self.timeline(), &[id.to_owned()], false)
         };
 
         self.begin_echo();
-        if edge >= 0 && self.selection.len() <= 1 {
-            self.gesture = Gesture::Trim {
-                clip: id.to_owned(),
-                edge: if edge == 0 { Edge::Start } else { Edge::End },
-                start: clip.start as f32,
-                duration: clip.duration as f32,
-                source_start: clip.source_start as f32,
-            };
-            return;
+        // An edge grabs the clip's matching group edges with it, unless Alt.
+        if edge >= 0 {
+            let linked = grouped_action(self.timeline(), &[id.to_owned()], alt);
+            let group_selected = linked.len() > 1
+                && linked.len() == self.selection.len()
+                && linked.iter().all(|held| self.selection.contains(held));
+            if self.selection.len() <= 1 || group_selected {
+                let frame = 1.0 / f64::from(self.frame_rate().max(1.0));
+                let mates = edge_group(self.timeline(), &clip, edge == 0, frame, alt);
+                self.gesture = Gesture::Trim {
+                    clip: id.to_owned(),
+                    edge: if edge == 0 { Edge::Start } else { Edge::End },
+                    start: clip.start as f32,
+                    duration: clip.duration as f32,
+                    source_start: clip.source_start as f32,
+                    mates,
+                };
+                return;
+            }
         }
         // What moves is what is selected, and nothing else. A detached
         // sound is a clip of its own: it goes where it is dragged, and its
         // picture stays, as any two clips do. It used to travel with its
         // picture, which made Detach a split in name only (#265); the link
-        // between them is kept for Reattach, not for the drag.
+        // between them is kept for Reattach, not for the drag. A group made
+        // by Detach Audio Linked is the exception, and rides together.
         let moving = if self.selection.iter().any(|held| held == id) {
             self.selection.clone()
         } else {
             vec![id.to_owned()]
         };
+        let moving = grouped_action(self.timeline(), &moving, alt);
         let origins = moving
             .iter()
             .filter_map(|clip_id| {
@@ -4836,6 +4862,7 @@ impl Studio {
                 start,
                 duration,
                 source_start,
+                mates,
             } => {
                 let (id, edge) = (clip.clone(), *edge);
                 let (start, duration, source_start) = (*start, *duration, *source_start);
@@ -4869,6 +4896,16 @@ impl Studio {
                         clip.duration = f64::from(duration - delta);
                         clip.source_start = f64::from(source_start + delta * speed);
                     }
+                    // The group's matching head edges ride the same shift.
+                    for mate in mates {
+                        let mate_speed = self.clip(&mate.clip).map_or(1.0, |c| c.speed as f32);
+                        if let Some(clip) = self.echo_clip_mut(&mate.clip) {
+                            clip.start = f64::from((mate.start + delta).max(0.0));
+                            clip.duration = f64::from((mate.duration - delta).max(MIN_DURATION));
+                            clip.source_start =
+                                f64::from((mate.source_start + delta * mate_speed).max(0.0));
+                        }
+                    }
                     // Trim follow: the playhead on the new first frame.
                     if self.prefs.trim_follow {
                         self.seek(at);
@@ -4876,8 +4913,15 @@ impl Studio {
                 } else {
                     let wanted = self.snapped(start + duration + seconds, threshold, &id);
                     let at = wanted.min(ceiling).max(start + MIN_DURATION);
+                    let delta = at - (start + duration);
                     if let Some(clip) = self.echo_clip_mut(&id) {
                         clip.duration = f64::from(at - start);
+                    }
+                    // The group's matching tail edges ride the same shift.
+                    for mate in mates {
+                        if let Some(clip) = self.echo_clip_mut(&mate.clip) {
+                            clip.duration = f64::from((mate.duration + delta).max(MIN_DURATION));
+                        }
                     }
                     // Trim follow: the playhead on the new last frame, one
                     // frame inside the edge - at the edge itself the clip
@@ -4954,19 +4998,53 @@ impl Studio {
                 edge,
                 start,
                 duration,
+                mates,
                 ..
             } => {
-                let after = echo.active().clip(&clip).cloned();
+                // The edges as the echo left them, before the echo is dropped.
+                let mut planned = Vec::new();
+                if let Some(after) = echo.active().clip(&clip) {
+                    planned.push((
+                        clip.clone(),
+                        after.start,
+                        after.duration,
+                        f64::from(start),
+                        f64::from(duration),
+                    ));
+                }
+                for mate in &mates {
+                    if let Some(after) = echo.active().clip(&mate.clip) {
+                        planned.push((
+                            mate.clip.clone(),
+                            after.start,
+                            after.duration,
+                            f64::from(mate.start),
+                            f64::from(mate.duration),
+                        ));
+                    }
+                }
                 self.echo = None;
-                let Some(after) = after else { return };
-                let delta = match edge {
-                    Edge::Start => after.start - f64::from(start),
-                    Edge::End => after.duration - f64::from(duration),
+                let Some(&(_, anchor_start, anchor_duration, ..)) = planned.first() else {
+                    return;
                 };
-                if delta.abs() > 1e-6 {
-                    let id = clip.clone();
-                    self.apply(Command::TrimClip {
-                        clip_id: clip,
+                let anchor_delta = match edge {
+                    Edge::Start => anchor_start - f64::from(start),
+                    Edge::End => anchor_duration - f64::from(duration),
+                };
+                if anchor_delta.abs() <= 1e-6 {
+                    return;
+                }
+                let mut commands = Vec::new();
+                for (clip_id, new_start, new_duration, old_start, old_duration) in planned {
+                    let delta = match edge {
+                        Edge::Start => new_start - old_start,
+                        Edge::End => new_duration - old_duration,
+                    };
+                    if delta.abs() <= 1e-6 {
+                        continue;
+                    }
+                    commands.push(Command::TrimClip {
+                        clip_id,
                         edge: match edge {
                             Edge::Start => TrimEdge::Start,
                             Edge::End => TrimEdge::End,
@@ -4976,13 +5054,23 @@ impl Studio {
                         // https://github.com/jub0t/Concat/issues/106
                         ripple: self.prefs.magnetic,
                     });
-                    // Trim follow: a magnetic head trim slides the clip back
-                    // into the gap, and the playhead goes with its first
-                    // frame.
-                    if self.prefs.trim_follow && edge == Edge::Start {
-                        if let Some(start) = self.clip(&id).map(|clip| clip.start) {
-                            self.seek(start as f32);
-                        }
+                }
+                // One undo step for the whole group's edge.
+                if commands.len() == 1 {
+                    self.apply(commands.remove(0));
+                } else {
+                    for command in commands {
+                        self.apply_in(Some("trim"), command);
+                    }
+                    if let Some(session) = self.session.as_mut() {
+                        session.end_gesture();
+                    }
+                }
+                // Trim follow: a magnetic head trim slides the clip back
+                // into the gap, and the playhead goes with its first frame.
+                if self.prefs.trim_follow && edge == Edge::Start {
+                    if let Some(start) = self.clip(&clip).map(|clip| clip.start) {
+                        self.seek(start as f32);
                     }
                 }
             }
@@ -6967,10 +7055,17 @@ impl Studio {
             .map(|clip| clip.id.clone())
             .collect();
         if !victims.is_empty() {
-            self.apply(Command::SplitClips {
-                clip_ids: victims,
-                time: at,
-            });
+            // A cut takes every clip's whole group, so linked tracks cut too.
+            let victims: Vec<String> = with_linked(self.timeline(), &victims)
+                .into_iter()
+                .filter(|id| self.clip(id).is_some_and(|c| !self.locked(&c.track_id)))
+                .collect();
+            if !victims.is_empty() {
+                self.apply(Command::SplitClips {
+                    clip_ids: victims,
+                    time: at,
+                });
+            }
         }
     }
 
@@ -7115,9 +7210,9 @@ impl Studio {
 
     /// The split tool pressed clip `id` at `seconds`: one cut, on the
     /// frame nearest the press, unless it is within a frame of either end
-    /// or the lane is locked.
+    /// or the lane is locked. The whole group is cut too, unless Alt.
     /// https://github.com/jub0t/Concat/issues/241
-    pub fn split_clip_at(&mut self, id: &str, seconds: f32) {
+    pub fn split_clip_at(&mut self, id: &str, seconds: f32, alt: bool) {
         let Some(clip) = self.clip(id).cloned() else {
             return;
         };
@@ -7131,8 +7226,12 @@ impl Studio {
             return;
         }
         self.flush_commit();
+        let victims: Vec<String> = grouped_action(self.timeline(), &[id.to_owned()], alt)
+            .into_iter()
+            .filter(|cid| self.clip(cid).is_some_and(|c| !self.locked(&c.track_id)))
+            .collect();
         self.apply(Command::SplitClips {
-            clip_ids: vec![id.to_owned()],
+            clip_ids: victims,
             time: at,
         });
     }
@@ -10183,6 +10282,17 @@ impl Studio {
             ));
             rows.push(rule());
         }
+        // A grouped clip - a video and its detached tracks - can be set free.
+        if link_of(clip).is_some() {
+            rows.push(action(
+                "ungroup",
+                t("clip.ungroup"),
+                Glyph::None,
+                "",
+                !locked,
+            ));
+            rows.push(rule());
+        }
         // The clip's sound, written out as it plays, as a file of its own
         // in the bin. For anything with sound in it; a clip whose track is
         // muted still renders, since the file is the clip's and not the
@@ -10926,6 +11036,11 @@ impl Studio {
                     clip_id: id.to_owned(),
                 });
             }
+            "ungroup" => {
+                self.apply(Command::Unlink {
+                    clip_ids: vec![id.to_owned()],
+                });
+            }
             "mute" => {
                 let volume = if clip.volume <= 0.0 { 1.0 } else { 0.0 };
                 self.apply(Command::UpdateClip {
@@ -11017,6 +11132,52 @@ fn detach_plan(clip: &Clip, has_audio: bool, detached: bool) -> DetachPlan {
     } else {
         DetachPlan::Detach
     }
+}
+
+/// Клипы для действия над `ids`: вся их группа, если Alt не зажат.
+fn grouped_action(timeline: &Timeline, ids: &[String], alt: bool) -> Vec<String> {
+    if alt {
+        ids.to_vec()
+    } else {
+        with_linked(timeline, ids)
+    }
+}
+
+/// Клипы группы `anchor`, у которых край `start_edge` совпадает с его
+/// краем в пределах кадра; сам `anchor` не входит, при Alt список пуст.
+fn edge_group(
+    timeline: &Timeline,
+    anchor: &Clip,
+    start_edge: bool,
+    frame: f64,
+    alt: bool,
+) -> Vec<TrimMate> {
+    if alt {
+        return Vec::new();
+    }
+    let Some(link) = link_of(anchor) else {
+        return Vec::new();
+    };
+    let edge_at = |clip: &Clip| {
+        if start_edge {
+            clip.start
+        } else {
+            clip.start + clip.duration
+        }
+    };
+    let edge = edge_at(anchor);
+    timeline
+        .clips
+        .iter()
+        .filter(|clip| clip.id != anchor.id && link_of(clip) == Some(link))
+        .filter(|clip| (edge_at(clip) - edge).abs() <= frame)
+        .map(|clip| TrimMate {
+            clip: clip.id.clone(),
+            start: clip.start as f32,
+            duration: clip.duration as f32,
+            source_start: clip.source_start as f32,
+        })
+        .collect()
 }
 
 /// Whether a move puts any clip somewhere other than where `before` has
@@ -11650,5 +11811,116 @@ mod tests {
         );
         assert_eq!(place_in(&after, 2.5), 0.25);
         assert_eq!(place_in(&after, 12.0), 1.0, "held to the end");
+    }
+
+    /// Проект с записью из двух звуковых дорожек, сведённой в группу:
+    /// видео и два его звука, связанные `DetachAudioLinked`.
+    fn linked_editor() -> (concat_project::Editor, String, Vec<String>) {
+        use concat_project::Editor;
+        use concat_project::commands::NewMedia;
+        use concat_project::model::{AudioTrack, ClipKind, MediaKind};
+
+        let audio_track = |index: u32, title: &str| AudioTrack {
+            index,
+            codec: "aac".to_owned(),
+            channels: 2,
+            sample_rate: 48_000,
+            title: title.to_owned(),
+            language: String::new(),
+        };
+        let mut editor = Editor::new();
+        let item = NewMedia {
+            path: "/rec.mp4".to_owned(),
+            name: "rec.mp4".to_owned(),
+            duration: Some(10.0),
+            kind: MediaKind::Video,
+            width: Some(1920),
+            height: Some(1080),
+            frame_rate: Some(30.0),
+            frame_rate_fraction: Some("30/1".to_owned()),
+            video_codec: Some("h264".to_owned()),
+            audio_codec: Some("aac".to_owned()),
+            has_audio: true,
+            audio_tracks: vec![audio_track(1, ""), audio_track(2, "Mic/Aux")],
+            origin: None,
+            color_space: Default::default(),
+        };
+        let media_id = editor
+            .apply(Command::AddMedia { item })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        let track_id = editor.project().active().tracks[0].id.clone();
+        let video = editor
+            .apply(Command::AddClip {
+                media_id,
+                track_id,
+                start: 0.0,
+                ripple: false,
+            })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        editor
+            .apply(Command::DetachAudioLinked {
+                clip_id: video.clone(),
+            })
+            .expect("detaches");
+        let sounds: Vec<String> = editor
+            .project()
+            .active()
+            .clips
+            .iter()
+            .filter(|clip| clip.kind == ClipKind::Audio)
+            .map(|clip| clip.id.clone())
+            .collect();
+        (editor, video, sounds)
+    }
+
+    /// Alt берёт один клип; без него действие берёт всю группу.
+    #[test]
+    fn alt_takes_one_clip_and_a_plain_action_takes_the_group() {
+        let (editor, video, sounds) = linked_editor();
+        let timeline = editor.project().active();
+        let group = super::grouped_action(timeline, std::slice::from_ref(&video), false);
+        assert_eq!(group.len(), 3, "{group:?}");
+        assert!(sounds.iter().all(|id| group.contains(id)));
+        let alone = super::grouped_action(timeline, std::slice::from_ref(&video), true);
+        assert_eq!(alone, vec![video.clone()]);
+    }
+
+    /// Обрезка края берёт головы группы, стоящие на одном времени, и не
+    /// берёт сдвинутую; с Alt список пуст.
+    #[test]
+    fn a_trim_takes_only_the_group_edges_that_line_up() {
+        use concat_project::commands::ClipMove;
+        let (mut editor, video, sounds) = linked_editor();
+        let moved = sounds[0].clone();
+        let track_id = editor
+            .project()
+            .active()
+            .clip(&moved)
+            .expect("sound")
+            .track_id
+            .clone();
+        editor
+            .apply(Command::MoveClips {
+                moves: vec![ClipMove {
+                    clip_id: moved.clone(),
+                    start: 20.0,
+                    track_id,
+                }],
+            })
+            .expect("moves");
+
+        let timeline = editor.project().active();
+        let anchor = timeline.clip(&video).expect("video").clone();
+        let frame = 1.0 / 30.0;
+        let mates = super::edge_group(timeline, &anchor, true, frame, false);
+        let ids: Vec<String> = mates.iter().map(|mate| mate.clip.clone()).collect();
+        assert!(ids.contains(&sounds[1]), "{ids:?}");
+        assert!(!ids.contains(&moved), "a moved head does not match");
+        assert!(!ids.contains(&video), "the anchor is not a mate");
+        assert!(super::edge_group(timeline, &anchor, true, frame, true).is_empty());
     }
 }

@@ -27,6 +27,7 @@
   "captions.transcribing": "文字起こし中",
   "captions.typeWordsPutScreen": "画面に表示する言葉を入力…",
   "captions.useVoiceFromTimeline": "タイムラインの音声を使う",
+  "clip.ungroup": "グループ解除",
   "clipInspector.add": "加算",
   "clipInspector.analysis": "解析",
   "clipInspector.audioTrack": "オーディオトラック",

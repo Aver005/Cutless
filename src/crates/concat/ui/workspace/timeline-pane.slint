@@ -101,8 +101,8 @@ export component TimelinePane inherits Rectangle {
     callback key-mark-moved(from: float, to: float);
     /// A press on an empty stretch of lane; see Editor.blur.
     callback floor-pressed();
-    callback clip-pressed(id: string, additive: bool, edge: int);
-    callback clip-split(id: string, seconds: float);
+    callback clip-pressed(id: string, additive: bool, alt: bool, edge: int);
+    callback clip-split(id: string, seconds: float, alt: bool);
     callback clip-volume(id: string, gain: float);
     callback clip-dragged(seconds: float, pixels: length);
     callback clip-released();
@@ -429,8 +429,8 @@ export component TimelinePane inherits Rectangle {
                 hovered(seconds) => { root.hovered(seconds); }
                 hover-ended => { root.hover-ended(); }
                 floor-pressed => { root.floor-pressed(); }
-                clip-pressed(id, additive, edge) => { root.clip-pressed(id, additive, edge); }
-                clip-split(id, seconds) => { root.clip-split(id, seconds); }
+                clip-pressed(id, additive, alt, edge) => { root.clip-pressed(id, additive, alt, edge); }
+                clip-split(id, seconds, alt) => { root.clip-split(id, seconds, alt); }
                 clip-volume(id, gain) => { root.clip-volume(id, gain); }
                 clip-dragged(seconds, pixels) => { root.clip-dragged(seconds, pixels); }
                 clip-released => { root.clip-released(); }

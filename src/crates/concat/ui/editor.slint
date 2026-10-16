@@ -377,12 +377,12 @@ export global Editor {
     callback scrubbed(seconds: float);
     /// A ruler diamond was dragged: every key at `from` moves to `to`.
     callback key-mark-moved(from: float, to: float);
-    callback clip-pressed(id: string, additive: bool, edge: int);
+    callback clip-pressed(id: string, additive: bool, alt: bool, edge: int);
     /// Save Video Frame As, from the picture's right-click menu: the
     /// frame at the playhead, at the output's size, as a PNG.
     callback save-frame();
     /// The split tool pressed a clip: cut it at `seconds`.
-    callback clip-split(id: string, seconds: float);
+    callback clip-split(id: string, seconds: float, alt: bool);
     /// A clip's volume line on the lanes dragged to `gain`, linear, 1
     /// being unity: written to the clip as the inspector's knob would be.
     callback clip-volume(id: string, gain: float);

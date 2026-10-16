@@ -965,11 +965,15 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_clip_pressed(on_lanes!(|state,
                                       id: SharedString,
                                       additive: bool,
+                                      alt: bool,
                                       edge: i32| {
-        state.clip_pressed(id.as_str(), additive, edge);
+        state.clip_pressed(id.as_str(), additive, alt, edge);
     }));
-    editor.on_clip_split(on_lanes!(|state, id: SharedString, seconds: f32| {
-        state.split_clip_at(&id, seconds);
+    editor.on_clip_split(on_lanes!(|state,
+                                    id: SharedString,
+                                    seconds: f32,
+                                    alt: bool| {
+        state.split_clip_at(&id, seconds, alt);
     }));
     editor.on_clip_volume(on_lanes!(|state, id: SharedString, gain: f32| {
         state.clip_volume(&id, gain);
@@ -1303,7 +1307,10 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
             return;
         }
         if !state.selection.iter().any(|held| held == id.as_str()) {
-            state.selection = vec![id.to_string()];
+            // A right-click on a grouped clip takes the whole group, as a
+            // plain click does, so Delete from the menu removes it all.
+            state.selection =
+                concat_project::commands::links::with_linked(state.timeline(), &[id.to_string()]);
         }
         state.menu_target = Some(id.to_string());
     }));

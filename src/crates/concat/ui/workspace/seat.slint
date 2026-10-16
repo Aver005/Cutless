@@ -436,11 +436,11 @@ export component Seat inherits Rectangle {
                 Editor.blur();
                 Editor.scrubbed(seconds);
             }
-            clip-pressed(id, additive, edge) => {
+            clip-pressed(id, additive, alt, edge) => {
                 Editor.blur();
-                Editor.clip-pressed(id, additive, edge);
+                Editor.clip-pressed(id, additive, alt, edge);
             }
-            clip-split(id, seconds) => { Editor.clip-split(id, seconds); }
+            clip-split(id, seconds, alt) => { Editor.clip-split(id, seconds, alt); }
             clip-volume(id, gain) => { Editor.clip-volume(id, gain); }
             clip-dragged(seconds, pixels) => { Editor.clip-dragged(seconds, pixels); }
             clip-released => { Editor.clip-released(); }

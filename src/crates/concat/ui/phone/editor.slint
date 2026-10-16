@@ -562,9 +562,9 @@ export component PhoneEditor inherits Rectangle {
                 hovered(seconds) => { Editor.hovered(seconds); }
                 hover-ended => { Editor.hover-ended(); }
                 floor-pressed => { Editor.blur(); }
-                clip-pressed(id, additive, edge) => {
+                clip-pressed(id, additive, alt, edge) => {
                     Editor.blur();
-                    Editor.clip-pressed(id, additive, edge);
+                    Editor.clip-pressed(id, additive, alt, edge);
                 }
                 clip-dragged(seconds, pixels) => { Editor.clip-dragged(seconds, pixels); }
                 clip-released => { Editor.clip-released(); }
