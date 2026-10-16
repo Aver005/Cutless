@@ -18,6 +18,7 @@ pub mod captions;
 pub mod export;
 pub mod media_bin;
 pub mod monitor;
+pub mod onboarding;
 pub mod pace;
 pub mod pauses;
 pub mod project;
@@ -35,6 +36,8 @@ pub enum Msg {
     Export(export::ExportMsg),
     /// To the settings sheet.
     Settings(settings::SettingsMsg),
+    /// To the first-launch introduction.
+    Onboarding(onboarding::OnboardingMsg),
     /// To the captions sheet.
     Captions(captions::CaptionsMsg),
     /// To the pauses sheet.
@@ -70,6 +73,7 @@ pub fn activity(msg: &Msg) -> Option<Activity> {
     use log::Level::{Debug, Info};
     use media_bin::MediaMsg;
     use monitor::MonitorMsg;
+    use onboarding::OnboardingMsg;
     use pauses::PausesMsg;
     use relink::RelinkMsg;
     use settings::SettingsMsg;
@@ -87,6 +91,7 @@ pub fn activity(msg: &Msg) -> Option<Activity> {
         | Msg::Export(ExportMsg::Progress { .. })
         | Msg::Captions(CaptionsMsg::Progress(_))
         | Msg::Speech(SpeechMsg::Progress(_))
+        | Msg::Onboarding(OnboardingMsg::Progress { .. })
         | Msg::Settings(SettingsMsg::ModelProgress { .. } | SettingsMsg::InstallProgress { .. }) => {
             return None;
         }
