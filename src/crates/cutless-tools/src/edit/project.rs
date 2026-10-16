@@ -448,12 +448,41 @@ fn clip_line(clip: &Clip, media: &BTreeMap<String, String>) -> String {
         line.push_str(&format!("  fade-out {}", support::num(clip.fade_out)));
     }
     if !clip.video_effects.is_empty() {
-        let ids: Vec<&str> = clip
+        let ids: Vec<String> = clip
             .video_effects
             .iter()
-            .map(|effect| effect.id.as_str())
+            .map(|effect| {
+                if effect.keys.is_empty() {
+                    effect.id.clone()
+                } else {
+                    let keyed: Vec<String> = effect
+                        .keys
+                        .iter()
+                        .map(|(key, run)| {
+                            format!(
+                                "{key}@{}",
+                                key_windows(clip, run.iter().map(|held| held.at))
+                            )
+                        })
+                        .collect();
+                    format!("{}(keys {})", effect.id, keyed.join(" "))
+                }
+            })
             .collect();
         line.push_str(&format!("  fx: {}", ids.join(" ")));
+    }
+    if !clip.keys.is_empty() {
+        line.push_str(&format!("  keys {}", key_counts(clip)));
+    }
+    if clip.speed_curve.is_some() {
+        line.push_str("  speed-curve");
+    }
+    if let Some(transition) = &clip.transition_in {
+        line.push_str(&format!(
+            "  transition-in {} {}",
+            transition.id,
+            support::num(transition.duration)
+        ));
     }
     if let Some(stream) = clip.audio_stream {
         line.push_str(&format!("  stream {stream}"));
@@ -468,6 +497,48 @@ fn clip_line(clip: &Clip, media: &BTreeMap<String, String>) -> String {
         line.push_str("  cutless.pause");
     }
     line
+}
+
+/// Ключи свойств клипа: сколько и где, `scale×32@00:12.300-00:13.333`.
+fn key_counts(clip: &Clip) -> String {
+    let counts: Vec<String> = concat_project::model::KeyProperty::ALL
+        .iter()
+        .filter_map(|property| {
+            let count = clip.keys_on(*property).count();
+            (count > 0).then(|| {
+                let windows = key_windows(clip, clip.keys_on(*property).map(|key| key.at));
+                format!("{}×{count}@{windows}", support::property_name(*property))
+            })
+        })
+        .collect();
+    counts.join(" ")
+}
+
+/// Разрыв между ключами, после которого начинается новое окно, секунды.
+const KEY_GAP: f64 = 0.25;
+/// Сколько окон ключей показывать, остальные — числом.
+const KEY_WINDOWS: usize = 3;
+
+/// Где лежат ключи на таймлайне: окна `00:04.000-00:05.000,00:08.000-00:09.000`.
+fn key_windows(clip: &Clip, ats: impl Iterator<Item = f64>) -> String {
+    let mut times: Vec<f64> = ats.map(|at| clip.start + at * clip.duration).collect();
+    times.sort_by(f64::total_cmp);
+    let mut windows: Vec<(f64, f64)> = Vec::new();
+    for time in times {
+        match windows.last_mut() {
+            Some(last) if time - last.1 <= KEY_GAP => last.1 = time,
+            _ => windows.push((time, time)),
+        }
+    }
+    let mut shown: Vec<String> = windows
+        .iter()
+        .take(KEY_WINDOWS)
+        .map(|(first, last)| format!("{}-{}", support::time(*first), support::time(*last)))
+        .collect();
+    if windows.len() > KEY_WINDOWS {
+        shown.push(format!("+{} more", windows.len() - KEY_WINDOWS));
+    }
+    shown.join(",")
 }
 
 /// Имя вида клипа для сводки.

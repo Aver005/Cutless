@@ -8,7 +8,7 @@ mod effects;
 mod media;
 mod output;
 mod project;
-mod support;
+pub(crate) mod support;
 mod text;
 
 use crate::Registry;

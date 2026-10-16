@@ -9,6 +9,7 @@ use serde_json::Value;
 
 pub mod edit;
 pub mod jobs;
+pub mod motion;
 pub mod pauses;
 pub mod speech;
 
@@ -202,6 +203,7 @@ pub fn default_registry() -> Registry {
     let mut registry = Registry::default();
     edit::register(&mut registry);
     jobs::register(&mut registry);
+    motion::register(&mut registry);
     speech::register(&mut registry);
     pauses::register(&mut registry);
     registry

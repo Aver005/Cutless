@@ -1,0 +1,14 @@
+[package]
+name = "cutless-motion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Cutless: edit moves as plain functions - speed ramp presets and hits that punch, shake and flash on the beat."
+
+[dependencies]
+concat-project.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

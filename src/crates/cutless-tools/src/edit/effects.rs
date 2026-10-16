@@ -15,12 +15,15 @@ use serde_json::{Value, json};
 use super::support;
 use crate::{Registry, ToolClass, ToolContext, ToolError, ToolOutput};
 
+/// До скольких найденных пакетов каталог показывает диапазоны параметров.
+const DETAIL_LIMIT: usize = 12;
+
 /// Регистрирует инструменты эффектов.
 pub(crate) fn register(registry: &mut Registry) {
     support::add(
         registry,
         "effects_catalogue",
-        "List effect packages with their ids, names and parameter keys. Filter by kind or a text query.",
+        "List effect packages with their ids, names and parameter keys. Filter by kind or a text query; when 12 or fewer match, each parameter shows min..max=default and whether it takes keys.",
         json!({
             "type": "object",
             "properties": {
@@ -92,11 +95,7 @@ struct RemoveInput {
 /// Перечисляет каталог эффектов.
 fn effects_catalogue(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
     let input: CatalogueInput = crate::input(input)?;
-    let value = ctx.call(concat_api::Request::CatalogueList {
-        kind: input.kind.clone(),
-    })?;
-    let packages: Vec<PackageInfo> =
-        serde_json::from_value(value).map_err(|error| ToolError::Failed(error.to_string()))?;
+    let packages: Vec<PackageInfo> = support::catalogue(ctx, input.kind.as_deref())?;
     let query = input.query.as_deref().map(str::to_lowercase);
     let matched: Vec<&PackageInfo> = packages
         .iter()
@@ -108,13 +107,28 @@ fn effects_catalogue(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutp
             })
         })
         .collect();
+    // Узкая выборка — с диапазонами и пометкой ключей, широкая — только имена, чтобы ответ не раздувался.
+    let detailed = matched.len() <= DETAIL_LIMIT;
     let lines: Vec<String> = matched
         .iter()
         .map(|package| {
-            let params: Vec<&str> = package
+            let params: Vec<String> = package
                 .params
                 .iter()
-                .map(|param| param.key.as_str())
+                .map(|param| {
+                    if detailed {
+                        let keys = if param.animate { ", keys" } else { "" };
+                        format!(
+                            "{}({}..{}={}{keys})",
+                            param.key,
+                            support::num(param.min),
+                            support::num(param.max),
+                            support::num(param.default)
+                        )
+                    } else {
+                        param.key.clone()
+                    }
+                })
                 .collect();
             let knobs = if params.is_empty() {
                 String::new()
@@ -143,9 +157,7 @@ fn effects_catalogue(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutp
 /// Добавляет эффект в цепочку каждого клипа.
 fn effect_apply(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
     let input: ApplyInput = crate::input(input)?;
-    if input.clip_ids.is_empty() {
-        return Err(ToolError::BadInput("clip_ids is empty".to_owned()));
-    }
+    support::some_clips(&input.clip_ids)?;
     let view = support::fetch(ctx)?;
     let mut commands = Vec::new();
     for clip_id in &input.clip_ids {

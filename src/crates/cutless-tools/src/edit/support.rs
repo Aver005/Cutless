@@ -3,6 +3,7 @@
 
 //! Общее для инструментов «edit»: вызовы редактора, разбор состояния, формат чисел и времени.
 
+use concat_project::model::KeyProperty;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -75,6 +76,23 @@ pub(crate) struct Settings {
     pub rate_num: i64,
     /// Знаменатель частоты кадров.
     pub rate_den: i64,
+}
+
+impl Settings {
+    /// Кадров в секунду; невнятный знаменатель считается единицей.
+    pub(crate) fn rate(&self) -> f64 {
+        self.rate_num as f64 / self.rate_den.max(1) as f64
+    }
+
+    /// Длина кадра в секундах.
+    pub(crate) fn frame(&self) -> f64 {
+        self.rate_den.max(1) as f64 / self.rate_num.max(1) as f64
+    }
+
+    /// Ширина кадра к высоте.
+    pub(crate) fn aspect(&self) -> f64 {
+        f64::from(self.width) / f64::from(self.height.max(1))
+    }
 }
 
 /// Разбирает ответ редактора в состояние.
@@ -186,4 +204,46 @@ pub(crate) fn revision(project: &concat_project::model::Project) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     json.hash(&mut hasher);
     hasher.finish()
+}
+
+/// Список клипов не пуст: пустой — ошибка, чтобы модель знала, что ничего не сделано.
+pub(crate) fn some_clips(clip_ids: &[String]) -> Result<(), ToolError> {
+    if clip_ids.is_empty() {
+        return Err(ToolError::BadInput("clip_ids is empty".to_owned()));
+    }
+    Ok(())
+}
+
+/// Пакеты каталога; `kind` сужает до одного вида.
+pub(crate) fn catalogue(
+    ctx: &mut ToolContext<'_>,
+    kind: Option<&str>,
+) -> Result<Vec<concat_api::PackageInfo>, ToolError> {
+    let value = ctx.call(concat_api::Request::CatalogueList {
+        kind: kind.map(str::to_owned),
+    })?;
+    serde_json::from_value(value).map_err(|error| ToolError::Failed(error.to_string()))
+}
+
+/// Имя свойства клипа так, как его принимают инструменты и показывает сводка.
+pub(crate) fn property_name(property: KeyProperty) -> &'static str {
+    match property {
+        KeyProperty::Scale => "scale",
+        KeyProperty::OffsetX => "offset_x",
+        KeyProperty::OffsetY => "offset_y",
+        KeyProperty::Rotation => "rotation",
+        KeyProperty::Opacity => "opacity",
+        KeyProperty::Volume => "volume",
+    }
+}
+
+/// Свойство клипа по имени из входа инструмента.
+pub(crate) fn property_of(name: &str) -> Result<KeyProperty, ToolError> {
+    KeyProperty::ALL
+        .into_iter()
+        .find(|property| property_name(*property) == name)
+        .ok_or_else(|| {
+            let names: Vec<&str> = KeyProperty::ALL.into_iter().map(property_name).collect();
+            ToolError::BadInput(format!("unknown property {name:?}: {}", names.join(", ")))
+        })
 }

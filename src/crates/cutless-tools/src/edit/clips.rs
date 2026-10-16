@@ -230,9 +230,7 @@ struct TransformInput {
 /// Режет клипы в указанное время.
 fn clips_split(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
     let input: SplitInput = crate::input(input)?;
-    if input.clip_ids.is_empty() {
-        return Err(ToolError::BadInput("clip_ids is empty".to_owned()));
-    }
+    support::some_clips(&input.clip_ids)?;
     let clip_ids = grouped(ctx, &input.clip_ids, input.alone)?;
     let view = support::apply(
         ctx,
@@ -363,9 +361,7 @@ fn group_followers(project: &Project, wanted: &[(String, f64)]) -> Vec<(String, 
 /// Удаляет клипы.
 fn clips_remove(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
     let input: RemoveInput = crate::input(input)?;
-    if input.clip_ids.is_empty() {
-        return Err(ToolError::BadInput("clip_ids is empty".to_owned()));
-    }
+    support::some_clips(&input.clip_ids)?;
     let clip_ids = grouped(ctx, &input.clip_ids, input.alone)?;
     let count = clip_ids.len();
     support::apply(
@@ -428,9 +424,7 @@ fn clip_add(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolE
 /// Ставит громкость и фейды клипов.
 fn clip_volume(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
     let input: VolumeInput = crate::input(input)?;
-    if input.clip_ids.is_empty() {
-        return Err(ToolError::BadInput("clip_ids is empty".to_owned()));
-    }
+    support::some_clips(&input.clip_ids)?;
     if input.volume.is_none() && input.fade_in.is_none() && input.fade_out.is_none() {
         return Err(ToolError::BadInput(
             "give volume, fade_in or fade_out".to_owned(),
