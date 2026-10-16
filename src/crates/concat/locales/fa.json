@@ -2,6 +2,8 @@
   "_": {
     "name": "فارسی"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "افزودن زیرنویس",
   "captions.addedCaptions": "{0} زیرنویس اضافه شد",
   "captions.captions": "زیرنویس‌ها",

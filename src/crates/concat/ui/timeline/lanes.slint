@@ -521,6 +521,19 @@ component Clip inherits Rectangle {
         commands: "M 0 0 L 1 1";
     }
 
+    // ── agent ────────────────────────────────────────────────────────────
+    //
+    // What the agent's last series changed: an accent veil, childless like
+    // the pause's, gone at the next change of anyone's.
+    if root.item.agent && !root.item.pause: Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        border-radius: Theme.r-sm;
+        background: Theme.accent.with-alpha(0.16);
+    }
+
     // ── outline ──────────────────────────────────────────────────────────
     //
     // Over the children, because they are over it: the header and the
@@ -532,9 +545,9 @@ component Clip inherits Rectangle {
         width: parent.width;
         height: parent.height;
         border-radius: Theme.r-sm;
-        border-width: (root.item.selected || root.item.pause) ? 2px : 1px;
+        border-width: (root.item.selected || root.item.pause || root.item.agent) ? 2px : 1px;
         border-color: root.item.pause ? Theme.danger
-            : root.item.selected ? Theme.accent : root.mark;
+            : (root.item.selected || root.item.agent) ? Theme.accent : root.mark;
     }
 
     // ── locked ───────────────────────────────────────────────────────────

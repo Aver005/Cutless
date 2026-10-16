@@ -361,13 +361,12 @@ impl SettingsPane {
                 if on {
                     enable_agents(&mut studio.prefs.server);
                 } else {
-                    // Off is just the flag: the server is left as it is.
                     studio.prefs.server.agents = false;
                 }
                 studio.prefs.save(&studio.host.dirs);
-                if on {
-                    self.apply_server(studio);
-                }
+                // A restart either way: the window's link to the API is
+                // made or dropped as the server starts.
+                self.apply_server(studio);
             }
             SettingsMsg::ServerHostEdited(text) => {
                 let (_, port) = split_listen(&studio.prefs.server.listen);
@@ -675,6 +674,8 @@ impl SettingsPane {
     /// takes effect; a bind that fails turns the switch back off and says
     /// why on the page.
     fn apply_server(&mut self, studio: &mut Studio) {
+        // A call waiting on this window would hold the server's stop up.
+        studio.host.bridge.close();
         if let Some(server) = studio.host.server.take() {
             server.stop();
         }
@@ -685,6 +686,10 @@ impl SettingsPane {
         if !prefs.enabled {
             return;
         }
+        // Cutless: with the agents' switch on, the project on screen is
+        // edited through the window rather than refused.
+        let bridge = prefs.agents.then(crate::panes::agent::WindowBridge::open);
+        studio.host.bridge = bridge.clone().unwrap_or_default();
         let started = prefs
             .listen
             .trim()
@@ -703,6 +708,9 @@ impl SettingsPane {
                     let mut api = concat_api::Api::new(events)?;
                     api.share_exporter(exporter);
                     api.share_open_projects(open_projects);
+                    if let Some(bridge) = bridge {
+                        api.link_window(Box::new(bridge));
+                    }
                     Ok(api)
                 })
             });

@@ -2,6 +2,8 @@
   "_": {
     "name": "اردو"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "کیپشن شامل کریں",
   "captions.addedCaptions": "{0} کیپشن شامل کیے گئے",
   "captions.captions": "کیپشنز",

@@ -2,6 +2,8 @@
   "_": {
     "name": "ไทย"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "เพิ่มคำบรรยาย",
   "captions.addedCaptions": "เพิ่มคำบรรยาย {0} รายการแล้ว",
   "captions.captions": "คำบรรยาย",

@@ -2,6 +2,8 @@
   "_": {
     "name": "Tiếng Việt"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "Thêm phụ đề",
   "captions.addedCaptions": "Đã thêm {0} phụ đề",
   "captions.captions": "Phụ đề",

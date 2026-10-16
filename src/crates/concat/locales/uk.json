@@ -2,6 +2,8 @@
   "_": {
     "name": "Українська"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "Додати субтитри",
   "captions.addedCaptions": "Додано субтитрів: {0}",
   "captions.captions": "Субтитри",

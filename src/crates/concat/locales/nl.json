@@ -2,6 +2,8 @@
   "_": {
     "name": "Nederlands"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "Ondertitels toevoegen",
   "captions.addedCaptions": "Ondertitels toegevoegd: {0}",
   "captions.captions": "Ondertitels",

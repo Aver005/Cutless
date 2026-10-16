@@ -101,6 +101,9 @@ export struct ClipData {
     /// The piece is marked as a pause: drawn in red, and a plain press puts
     /// it back. See the pauses sheet.
     pause: bool,
+    /// Cutless: the agent's last series changed this clip, and nothing
+    /// has changed since; drawn with an accent veil.
+    agent: bool,
     /// The transition on the cut into this clip is the one selected:
     /// picked on its own, with the clip itself unselected.
     transition-selected: bool,

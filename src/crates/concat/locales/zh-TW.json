@@ -2,6 +2,8 @@
   "_": {
     "name": "繁體中文"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "加入字幕",
   "captions.addedCaptions": "已加入 {0} 則字幕",
   "captions.captions": "字幕",

@@ -2,6 +2,8 @@
   "_": {
     "name": "Español"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "Add captions",
   "captions.addedCaptions": "{0} subtítulos añadidos",
   "captions.captions": "Subtítulos",

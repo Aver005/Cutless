@@ -2,6 +2,8 @@
   "_": {
     "name": "Bahasa Indonesia"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "Tambahkan subtitel",
   "captions.addedCaptions": "{0} subtitel ditambahkan",
   "captions.captions": "Subtitel",

@@ -40,6 +40,7 @@ import { CaptionsDialog, CaptionsSheetData } from "dialogs/captions.slint";
 import { SpeechDialog, SpeechSheetData } from "dialogs/speech.slint";
 import { PausesDialog, PausesSheetData, PausesState, PauseMode } from "dialogs/pauses.slint";
 import { OnboardingData, OnboardingDialog } from "dialogs/onboarding.slint";
+import { AgentState } from "agent.slint";
 import { DockDivider, DockSide, SeatBox } from "dock.slint";
 import { Editor } from "editor.slint";
 import { PaneKind, Panes } from "workspace/pane-switcher.slint";
@@ -79,6 +80,7 @@ export {
     OnboardingData,
     ShipData, Ships,
     PausesSheetData, PausesState, PauseMode,
+    AgentState,
 }
 
 export component App inherits Window {
@@ -269,6 +271,7 @@ export component App inherits Window {
     callback settings-download-source-changed(index: int);
     callback settings-download-base-edited(text: string);
     callback settings-server-enabled-changed(on: bool);
+    callback settings-agents-changed(on: bool);
     callback settings-server-host-edited(text: string);
     callback settings-server-port-edited(port: int);
     callback settings-server-token-edited(text: string);
@@ -802,6 +805,7 @@ export component App inherits Window {
         download-source-changed(index) => { root.settings-download-source-changed(index); }
         download-base-edited(text) => { root.settings-download-base-edited(text); }
         server-enabled-changed(on) => { root.settings-server-enabled-changed(on); }
+        agents-changed(on) => { root.settings-agents-changed(on); }
         server-host-edited(text) => { root.settings-server-host-edited(text); }
         server-port-edited(port) => { root.settings-server-port-edited(port); }
         server-token-edited(text) => { root.settings-server-token-edited(text); }

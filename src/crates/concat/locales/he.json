@@ -2,6 +2,8 @@
   "_": {
     "name": "עברית"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "הוספת כתוביות",
   "captions.addedCaptions": "נוספו {0} כתוביות",
   "captions.captions": "כתוביות",

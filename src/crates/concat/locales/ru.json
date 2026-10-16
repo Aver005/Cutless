@@ -2,6 +2,8 @@
   "_": {
     "name": "Русский"
   },
+  "agent.turnDone": "Агент: правок — {0}. Ctrl+Z отменит всю серию",
+  "agent.working": "Агент правит",
   "captions.addCaptions": "Добавить субтитры",
   "captions.addedCaptions": "Добавлено субтитров: {0}",
   "captions.captions": "Субтитры",

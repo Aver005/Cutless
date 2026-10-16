@@ -2,6 +2,8 @@
   "_": {
     "name": "हिन्दी"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "कैप्शन जोड़ें",
   "captions.addedCaptions": "{0} कैप्शन जोड़े गए",
   "captions.captions": "कैप्शन",

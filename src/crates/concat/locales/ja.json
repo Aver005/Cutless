@@ -2,6 +2,8 @@
   "_": {
     "name": "日本語"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "字幕を追加",
   "captions.addedCaptions": "{0} 件の字幕を追加しました",
   "captions.captions": "字幕",

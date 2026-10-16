@@ -2,6 +2,8 @@
   "_": {
     "name": "Hrvatski"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "Dodaj titlove",
   "captions.addedCaptions": "Dodano {0} titlova",
   "captions.captions": "Titlovi",

@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Cutless contributors
+
+import { Theme } from "theme/theme.slint";
+
+/// Агент правит проект через сервер окна: шапка показывает плашку.
+export global AgentState {
+    in property <bool> working;
+    in property <string> label;
+}
+
+/// Плашка «агент правит» для шапки.
+export component AgentBadge inherits Rectangle {
+    height: 18px;
+    width: label.preferred-width + 16px;
+    border-radius: Theme.r-sm;
+    background: Theme.accent.with-alpha(0.18);
+
+    label := Text {
+        x: 8px;
+        height: parent.height;
+        text: AgentState.label;
+        color: Theme.accent;
+        font-size: Theme.fs-xs;
+        vertical-alignment: center;
+    }
+}

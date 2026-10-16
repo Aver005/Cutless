@@ -57,6 +57,9 @@ pub struct Host {
     pub server: Option<concat_server::Server>,
     /// Which project folders are open, here or over the socket.
     pub open_projects: concat_api::OpenProjects,
+    /// Cutless: the server's way to the project on screen, closed while
+    /// agents may not edit it; closed before the server stops.
+    pub bridge: crate::panes::agent::WindowBridge,
 }
 
 impl Host {
@@ -84,6 +87,7 @@ impl Host {
             speech: Arc::new(Speech::new()),
             server: None,
             open_projects: concat_api::OpenProjects::default(),
+            bridge: crate::panes::agent::WindowBridge::default(),
         })
     }
 }

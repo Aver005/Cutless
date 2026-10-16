@@ -2,6 +2,8 @@
   "_": {
     "name": "العربية"
   },
+  "agent.turnDone": "Agent: {0} edit(s). Ctrl+Z undoes the whole series",
+  "agent.working": "Agent is editing",
   "captions.addCaptions": "إضافة تسميات توضيحية",
   "captions.addedCaptions": "تمت إضافة {0} من التسميات التوضيحية",
   "captions.captions": "تسميات توضيحية",

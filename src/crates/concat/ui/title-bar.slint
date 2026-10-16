@@ -5,6 +5,7 @@ import { I18n } from "i18n.slint";
 import { Theme } from "theme/theme.slint";
 import { Glyph, Icon } from "icons.slint";
 import { AddPaneButton, PaneKind } from "workspace/pane-switcher.slint";
+import { AgentBadge, AgentState } from "agent.slint";
 
 // The custom title bar.
 //
@@ -360,6 +361,11 @@ export component TitleBar inherits Rectangle {
                 color: Theme.fg-dim;
                 font-size: Theme.fs-xs;
             }
+        }
+
+        if AgentState.working: VerticalLayout {
+            alignment: center;
+            AgentBadge { }
         }
     }
 }

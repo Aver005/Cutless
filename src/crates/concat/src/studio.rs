@@ -913,6 +913,8 @@ pub struct Studio {
     pub speech: crate::panes::speech::SpeechPane,
     /// The pauses sheet and the pause-removal marks on the timeline.
     pub pauses: crate::panes::pauses::PausesPane,
+    /// Cutless: an agent's edits through the server, and what they touched.
+    pub agent: crate::panes::agent::AgentPane,
     /// A file from the library lent the monitor and the speakers; see
     /// `crate::source`.
     pub source: Option<crate::source::Source>,
@@ -2207,6 +2209,7 @@ impl Studio {
             captions: crate::panes::captions::CaptionsPane::default(),
             speech: crate::panes::speech::SpeechPane::default(),
             pauses: crate::panes::pauses::PausesPane::default(),
+            agent: crate::panes::agent::AgentPane::default(),
             source: None,
             meters: crate::meters::MeterFeed::default(),
             voiceover: crate::panes::voiceover::VoiceoverPane::default(),
@@ -2559,6 +2562,41 @@ impl Studio {
                 None
             }
         }
+    }
+
+    /// Cutless: an agent's edit, folded into its series' undo step. The
+    /// error goes back to the agent instead of to a toast.
+    pub(crate) fn apply_agent(
+        &mut self,
+        gesture: &str,
+        command: Command,
+    ) -> Result<concat_host::session::EditorView, String> {
+        self.end_burst();
+        log::info!("edit: {} ({gesture})", command_name(&command));
+        self.flush_commit();
+        self.echo = None;
+        self.last_commit = None;
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| "no project is open".to_owned())?;
+        let before = session.video().color_space;
+        let view = session.apply_within(Some(gesture), command)?;
+        let after = session.video().color_space;
+        self.after_change();
+        self.tell_of_hdr(before, after);
+        Ok(view)
+    }
+
+    /// The document's revision, counted up at every change.
+    pub(crate) fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Whether a pointer gesture or a held inspector commit is in flight,
+    /// which an edit from elsewhere would cut short.
+    pub(crate) fn pointer_busy(&self) -> bool {
+        !matches!(self.gesture, Gesture::None) || self.commit_pending
     }
 
     /// [`Studio::apply`], or [`Studio::apply_within`] when `gesture` names
@@ -8057,6 +8095,7 @@ impl Studio {
                         has_audio: self.clip_has_sound(clip),
                         strip: self.strip_of(clip),
                         pause: is_pause(clip),
+                        agent: self.agent.touched(&clip.id, self.revision),
                     }
                 })
                 .collect(),
@@ -8078,6 +8117,9 @@ impl Studio {
         pauses.set_count(pause_count);
         pauses.set_total(format!("{pause_seconds:.1}").replace('.', ",").into());
         app.global::<PauseMode>().set_skip(self.pauses.skip);
+        let agent = app.global::<AgentState>();
+        agent.set_working(self.agent.working(self.revision));
+        agent.set_label(crate::panes::agent::working_label().into());
 
         // What is under the playhead. The topmost picture wins, the way the
         // compositor stacks them.
