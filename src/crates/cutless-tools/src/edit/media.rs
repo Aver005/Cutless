@@ -68,8 +68,12 @@ fn media_list(ctx: &mut ToolContext<'_>, _input: Value) -> Result<ToolOutput, To
             .duration
             .map(|seconds| format!(" {}", support::time(seconds)))
             .unwrap_or_default();
+        let tracks = match item.audio_tracks.len() {
+            0 | 1 => String::new(),
+            count => format!("  audio tracks: {count}"),
+        };
         lines.push(format!(
-            "{}  {}  \"{}\"{duration}  {}",
+            "{}  {}  \"{}\"{duration}{tracks}  {}",
             item.id,
             media_kind(item.kind),
             item.name,

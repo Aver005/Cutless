@@ -455,6 +455,15 @@ fn clip_line(clip: &Clip, media: &BTreeMap<String, String>) -> String {
             .collect();
         line.push_str(&format!("  fx: {}", ids.join(" ")));
     }
+    if let Some(stream) = clip.audio_stream {
+        line.push_str(&format!("  stream {stream}"));
+    }
+    if clip.muted == Some(true) {
+        line.push_str("  muted");
+    }
+    if let Some(group) = concat_project::commands::links::link_of(clip) {
+        line.push_str(&format!("  group {group}"));
+    }
     if concat_project::commands::pauses::is_pause(clip) {
         line.push_str("  cutless.pause");
     }

@@ -3,8 +3,9 @@
 
 //! Инструменты монтажа: разрезать, подрезать, сдвинуть, удалить, добавить клип, звук и кадр.
 
-use concat_project::Command;
-use concat_project::commands::{ClipMove, ClipPatch, TrimEdge};
+use concat_project::commands::{ClipMove, ClipPatch, TrimEdge, links};
+use concat_project::model::MediaKind;
+use concat_project::{Command, Project};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -16,12 +17,13 @@ pub(crate) fn register(registry: &mut Registry) {
     support::add(
         registry,
         "clips_split",
-        "Cut each named clip in two at one timeline time, in seconds.",
+        "Cut each named clip in two at one timeline time, in seconds. A clip in a linked group cuts with its group.",
         json!({
             "type": "object",
             "properties": {
                 "clip_ids": { "type": "array", "items": { "type": "string" } },
-                "time": { "type": "number", "description": "Cut point in seconds" }
+                "time": { "type": "number", "description": "Cut point in seconds" },
+                "alone": { "type": "boolean", "description": "Only these clips, not the rest of their linked groups" }
             },
             "required": ["clip_ids", "time"]
         }),
@@ -48,7 +50,7 @@ pub(crate) fn register(registry: &mut Registry) {
     support::add(
         registry,
         "clips_move",
-        "Move any number of clips in one edit: new start in seconds and, optionally, a new track.",
+        "Move any number of clips in one edit: new start in seconds and, optionally, a new track. A clip in a linked group takes its group along by the same shift.",
         json!({
             "type": "object",
             "properties": {
@@ -63,7 +65,8 @@ pub(crate) fn register(registry: &mut Registry) {
                         },
                         "required": ["clip_id", "start"]
                     }
-                }
+                },
+                "alone": { "type": "boolean", "description": "Only these clips, not the rest of their linked groups" }
             },
             "required": ["moves"]
         }),
@@ -73,12 +76,13 @@ pub(crate) fn register(registry: &mut Registry) {
     support::add(
         registry,
         "clips_remove",
-        "Delete clips from the active timeline. ripple closes the gaps they leave.",
+        "Delete clips from the active timeline. ripple closes the gaps they leave. A clip in a linked group goes with its group.",
         json!({
             "type": "object",
             "properties": {
                 "clip_ids": { "type": "array", "items": { "type": "string" } },
-                "ripple": { "type": "boolean" }
+                "ripple": { "type": "boolean" },
+                "alone": { "type": "boolean", "description": "Only these clips, not the rest of their linked groups" }
             },
             "required": ["clip_ids"]
         }),
@@ -88,13 +92,14 @@ pub(crate) fn register(registry: &mut Registry) {
     support::add(
         registry,
         "clip_add",
-        "Place a media clip on the timeline. Without a track it lands on the first free lane.",
+        "Place a media clip on the timeline. Without a track it lands on the first free lane. A video with several audio tracks is split into one sound clip per track, linked with the video, unless split_audio is false.",
         json!({
             "type": "object",
             "properties": {
                 "media_id": { "type": "string" },
                 "start": { "type": "number" },
-                "track_id": { "type": "string" }
+                "track_id": { "type": "string" },
+                "split_audio": { "type": "boolean" }
             },
             "required": ["media_id", "start"]
         }),
@@ -143,6 +148,8 @@ pub(crate) fn register(registry: &mut Registry) {
 struct SplitInput {
     clip_ids: Vec<String>,
     time: f64,
+    #[serde(default)]
+    alone: bool,
 }
 
 /// Вход `clip_trim`.
@@ -159,6 +166,8 @@ struct TrimInput {
 #[derive(Deserialize)]
 struct MoveInput {
     moves: Vec<MoveIn>,
+    #[serde(default)]
+    alone: bool,
 }
 
 /// Один сдвиг во входе.
@@ -176,6 +185,8 @@ struct RemoveInput {
     clip_ids: Vec<String>,
     #[serde(default)]
     ripple: bool,
+    #[serde(default)]
+    alone: bool,
 }
 
 /// Вход `clip_add`.
@@ -185,6 +196,9 @@ struct AddInput {
     start: f64,
     #[serde(default)]
     track_id: Option<String>,
+    /// Разделить звук по дорожкам; по умолчанию — да, если дорожек несколько.
+    #[serde(default)]
+    split_audio: Option<bool>,
 }
 
 /// Вход `clip_volume`.
@@ -219,10 +233,11 @@ fn clips_split(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, To
     if input.clip_ids.is_empty() {
         return Err(ToolError::BadInput("clip_ids is empty".to_owned()));
     }
+    let clip_ids = grouped(ctx, &input.clip_ids, input.alone)?;
     let view = support::apply(
         ctx,
         Command::SplitClips {
-            clip_ids: input.clip_ids.clone(),
+            clip_ids,
             time: input.time,
         },
     )?;
@@ -271,6 +286,11 @@ fn clips_move(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, Too
         .iter()
         .map(|one| (one.clip_id.clone(), one.start))
         .collect();
+    let followers = if input.alone {
+        Vec::new()
+    } else {
+        group_followers(&support::fetch(ctx)?.project, &wanted)
+    };
     let moves: Vec<ClipMove> = input
         .moves
         .into_iter()
@@ -279,6 +299,11 @@ fn clips_move(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, Too
             start: one.start,
             track_id: one.track_id.unwrap_or_default(),
         })
+        .chain(followers.iter().map(|(clip_id, start)| ClipMove {
+            clip_id: clip_id.clone(),
+            start: *start,
+            track_id: String::new(),
+        }))
         .collect();
     let view = support::apply(ctx, Command::MoveClips { moves })?;
     // Редактор не даёт клипам наложиться и может оставить клип на месте: модель должна это знать.
@@ -295,7 +320,44 @@ fn clips_move(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, Too
             ));
         }
     }
+    if !followers.is_empty() {
+        let ids: Vec<&str> = followers.iter().map(|(id, _)| id.as_str()).collect();
+        lines.push(format!("moved with their groups: {}", ids.join(", ")));
+    }
     Ok(ToolOutput::text(lines.join("\n")))
+}
+
+/// Клипы и их группы целиком; с `alone` — только сами клипы.
+fn grouped(
+    ctx: &mut ToolContext<'_>,
+    clip_ids: &[String],
+    alone: bool,
+) -> Result<Vec<String>, ToolError> {
+    if alone {
+        return Ok(clip_ids.to_vec());
+    }
+    let view = support::fetch(ctx)?;
+    Ok(links::with_linked(view.project.active(), clip_ids))
+}
+
+/// Остальные клипы групп: (id, новое начало) с тем же сдвигом, что у клипа своей группы.
+fn group_followers(project: &Project, wanted: &[(String, f64)]) -> Vec<(String, f64)> {
+    let timeline = project.active();
+    let mut followers: Vec<(String, f64)> = Vec::new();
+    for (clip_id, start) in wanted {
+        let Some(clip) = timeline.clip(clip_id) else {
+            continue;
+        };
+        let shift = start - clip.start;
+        for member in links::with_linked(timeline, std::slice::from_ref(clip_id)) {
+            let taken = wanted.iter().any(|(id, _)| *id == member)
+                || followers.iter().any(|(id, _)| *id == member);
+            if let (false, Some(other)) = (taken, timeline.clip(&member)) {
+                followers.push((member, other.start + shift));
+            }
+        }
+    }
+    followers
 }
 
 /// Удаляет клипы.
@@ -304,17 +366,16 @@ fn clips_remove(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, T
     if input.clip_ids.is_empty() {
         return Err(ToolError::BadInput("clip_ids is empty".to_owned()));
     }
+    let clip_ids = grouped(ctx, &input.clip_ids, input.alone)?;
+    let count = clip_ids.len();
     support::apply(
         ctx,
         Command::RemoveClips {
-            clip_ids: input.clip_ids.clone(),
+            clip_ids,
             ripple: input.ripple,
         },
     )?;
-    Ok(ToolOutput::text(format!(
-        "removed {} clips",
-        input.clip_ids.len()
-    )))
+    Ok(ToolOutput::text(format!("removed {count} clips")))
 }
 
 /// Ставит клип из медиатеки на дорожку.
@@ -334,8 +395,27 @@ fn clip_add(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolE
     };
     let view = support::apply(ctx, command)?;
     let id = view.created_id.clone().unwrap_or_default();
+    let tracks = view
+        .project
+        .media_by_id(&input.media_id)
+        .filter(|media| media.kind == MediaKind::Video)
+        .map_or(0, |media| media.audio_tracks.len());
+    let mut text = format!("added clip {} at {}", id, support::time(input.start));
+    if tracks > 1 && input.split_audio != Some(false) {
+        let view = support::apply(
+            ctx,
+            Command::DetachAudioLinked {
+                clip_id: id.clone(),
+            },
+        )?;
+        let group = links::with_linked(view.project.active(), std::slice::from_ref(&id));
+        text.push_str(&format!(
+            "; its {tracks} audio tracks are sound clips linked with it: {}",
+            group.join(", ")
+        ));
+    }
     Ok(ToolOutput {
-        text: format!("added clip {} at {}", id, support::time(input.start)),
+        text,
         data: json!({ "createdId": id }),
         ..ToolOutput::default()
     })

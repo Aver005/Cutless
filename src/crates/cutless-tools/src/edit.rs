@@ -712,4 +712,125 @@ mod tests {
         assert_eq!(effects.len(), 1);
         assert_eq!(effects[0]["id"], "concat.grain");
     }
+
+    /// Видео с двумя дорожками звука ставится группой; сводка её показывает,
+    /// сдвиг клипа тянет группу, а `alone` двигает один клип.
+    #[test]
+    fn a_two_track_video_lands_as_a_group_that_moves_together() {
+        use concat_project::Command;
+        use concat_project::commands::NewMedia;
+        use concat_project::model::{AudioTrack, MediaKind};
+
+        let root = scratch("group");
+        let location = root.join("projects");
+        std::fs::create_dir_all(&location).expect("location");
+        let mut api = api(&root);
+        let mut ctx = ToolContext {
+            editor: &mut api,
+            project: None,
+        };
+        registry()
+            .call(
+                &mut ctx,
+                "project_create",
+                json!({ "location": location.to_string_lossy(), "name": "Cs" }),
+            )
+            .expect("created");
+        let path = ctx.project.clone().expect("project");
+        let track = |index: u32| AudioTrack {
+            index,
+            codec: "aac".to_owned(),
+            channels: 2,
+            sample_rate: 48_000,
+            title: String::new(),
+            language: String::new(),
+        };
+        let item = NewMedia {
+            path: "/clips/cs2.mp4".to_owned(),
+            name: "cs2.mp4".to_owned(),
+            duration: Some(35.0),
+            kind: MediaKind::Video,
+            width: Some(1920),
+            height: Some(1080),
+            frame_rate: Some(60.0),
+            frame_rate_fraction: Some("60/1".to_owned()),
+            video_codec: Some("h264".to_owned()),
+            audio_codec: Some("aac".to_owned()),
+            has_audio: true,
+            audio_tracks: vec![track(1), track(2)],
+            origin: None,
+            color_space: Default::default(),
+        };
+        let added = ctx
+            .call(Request::EditApply {
+                path,
+                command: Box::new(Command::AddMedia { item }),
+            })
+            .expect("media");
+        let media_id = added["createdId"].as_str().expect("media id").to_owned();
+
+        let placed = registry()
+            .call(
+                &mut ctx,
+                "clip_add",
+                json!({ "media_id": media_id, "start": 1.0 }),
+            )
+            .expect("placed");
+        assert!(placed.text.contains("2 audio tracks"), "{}", placed.text);
+        let video = placed.data["createdId"].as_str().expect("id").to_owned();
+
+        let summary = registry()
+            .call(&mut ctx, "timeline_summary", json!({}))
+            .expect("summary");
+        assert_eq!(summary.text.matches(&format!("group {video}")).count(), 3);
+        assert!(summary.text.contains("stream 2"), "{}", summary.text);
+        let listed = registry()
+            .call(&mut ctx, "media_list", json!({}))
+            .expect("media");
+        assert!(listed.text.contains("audio tracks: 2"), "{}", listed.text);
+
+        let moved = registry()
+            .call(
+                &mut ctx,
+                "clips_move",
+                json!({ "moves": [{ "clip_id": video, "start": 3.0 }] }),
+            )
+            .expect("moved");
+        assert!(
+            moved.text.contains("moved with their groups"),
+            "{}",
+            moved.text
+        );
+        let view = crate::edit::support::fetch(&mut ctx).expect("view");
+        assert!(
+            view.project
+                .active()
+                .clips
+                .iter()
+                .all(|clip| (clip.start - 3.0).abs() < 1e-9)
+        );
+
+        registry()
+            .call(
+                &mut ctx,
+                "clips_move",
+                json!({ "moves": [{ "clip_id": video, "start": 5.0 }], "alone": true }),
+            )
+            .expect("moved alone");
+        let view = crate::edit::support::fetch(&mut ctx).expect("view");
+        let starts: Vec<f64> = view
+            .project
+            .active()
+            .clips
+            .iter()
+            .map(|clip| clip.start)
+            .collect();
+        assert_eq!(
+            starts
+                .iter()
+                .filter(|start| (**start - 3.0).abs() < 1e-9)
+                .count(),
+            2
+        );
+    }
 }
