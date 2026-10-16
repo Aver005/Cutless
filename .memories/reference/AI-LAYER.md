@@ -76,7 +76,7 @@
 
 ### Что уже есть (2026-10-16)
 
-38 инструментов в `src/crates/cutless-tools` (`default_registry()`), имена и поля входа — snake_case:
+47 инструментов в `src/crates/cutless-tools` (`default_registry()`), имена и поля входа — snake_case:
 
 | Группа | Инструменты |
 |---|---|
@@ -89,6 +89,8 @@
 | Речь | `speech_models`, `transcribe`, `transcript_get`, `transcript_search`, `captions_make` |
 | Паузы и звук | `pauses_analyze`, `pauses_mark`, `pauses_list`, `pauses_restore`, `pauses_confirm`, `audio_clean` |
 | Задачи | `job_status`, `job_cancel` |
+| Движение (`MOTION.md`) | `clip_keys`, `effect_keys`, `clip_speed`, `layer_add`, `transition_set`, `clip_look`, `hit_fx` |
+| Сетка долей (`BEATS.md`) | `beats_analyze`, `beats_get` |
 
 **Долгие задачи** (`cutless-tools/src/jobs.rs`, доска `Jobs` в `ToolContext`). `transcribe` и `export_start` — фоновые
 задачи: инструмент ждёт до `wait_seconds` (по умолчанию 20 с, не больше 45) и отвечает итогом или id задачи
