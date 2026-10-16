@@ -29,10 +29,10 @@ pub(super) fn register(registry: &mut Registry) {
         registry,
         "clip_speed",
         "Retime clips: a constant speed, a speed ramp preset, or your own curve; constant: true \
-         drops a curve. The source covered stays the same, so the clip gets longer or shorter. A \
-         constant slow-down pushes later clips on the lane along; a curve or preset moves nothing \
-         and may overlap the next clip - check timeline_summary. Retime first, then add hits: \
-         keys sit at fractions of the clip and stretch with it.",
+         drops a curve. The source covered stays the same, so the clip gets longer or shorter; \
+         slowing down pushes later clips on the lane along, speeding up leaves a gap - check \
+         timeline_summary. Retime first, then add hits: keys sit at fractions of the clip and \
+         stretch with it.",
         json!({
             "type": "object",
             "properties": {

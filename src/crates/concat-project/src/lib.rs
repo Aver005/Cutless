@@ -2357,6 +2357,54 @@ mod tests {
     }
 
     #[test]
+    fn a_slowing_speed_curve_pushes_the_lane_along() {
+        let (mut editor, media_id, clip_id) = fixture();
+        let first = editor
+            .project()
+            .active()
+            .clip(&clip_id)
+            .expect("clip")
+            .clone();
+        let next_id = editor
+            .apply(Command::AddClip {
+                media_id,
+                track_id: first.track_id.clone(),
+                start: first.start + first.duration,
+                ripple: false,
+            })
+            .expect("a second clip")
+            .created_id
+            .expect("its id");
+        editor
+            .apply(Command::SetClipSpeedCurve {
+                clip_id: clip_id.clone(),
+                curve: Some(vec![
+                    crate::model::SpeedPoint {
+                        at: 0.0,
+                        speed: 0.5,
+                    },
+                    crate::model::SpeedPoint {
+                        at: 1.0,
+                        speed: 0.5,
+                    },
+                ]),
+            })
+            .expect("a curve");
+        let timeline = editor.project().active();
+        let slowed = timeline.clip(&clip_id).expect("clip");
+        let next = timeline.clip(&next_id).expect("next");
+        assert!(
+            slowed.duration > first.duration * 1.9,
+            "{}",
+            slowed.duration
+        );
+        assert!(
+            next.start + 1e-9 >= slowed.start + slowed.duration,
+            "covered"
+        );
+    }
+
+    #[test]
     fn detach_and_reattach_round_trip_the_sound() {
         let (mut editor, _, clip_id) = fixture();
         let sound_id = editor

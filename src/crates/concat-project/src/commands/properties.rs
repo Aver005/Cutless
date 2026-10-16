@@ -105,20 +105,8 @@ pub(super) fn apply(
                     (source_covered / next).max(MIN_CLIP_DURATION),
                 )
                 | assign(&mut clip.speed_curve, None);
-            // Slowed down, the clip grows into what follows it: the rest of
-            // the lane moves along by the growth, as a freeze frame's does,
-            // rather than being covered.
-            let (track_id, start, duration) = (clip.track_id.clone(), clip.start, clip.duration);
-            let grow = start + duration - old_end;
-            if grow > 0.0 && !timeline.is_free(&track_id, start, duration, &[&clip_id]) {
-                for other in timeline.clips_where(|other| {
-                    other.id != clip_id
-                        && other.track_id == track_id
-                        && other.start >= old_end - crate::placement::TOUCH
-                }) {
-                    other.start += grow;
-                }
-            }
+            // Cutless: the lane push, shared with the curve below.
+            push_lane_after(timeline, &clip_id, old_end);
             Ok(Outcome {
                 created_id: None,
                 applied,
@@ -289,6 +277,7 @@ pub(super) fn apply(
             };
             let curve = curve.filter(|points| crate::speed::curve_of(points).is_some());
             let source_covered = clip.duration * clip.speed;
+            let old_end = clip.start + clip.duration;
             let mean = curve
                 .as_ref()
                 .map(|points| crate::speed::mean_of(points))
@@ -300,6 +289,9 @@ pub(super) fn apply(
                     &mut clip.duration,
                     (source_covered / mean).max(MIN_CLIP_DURATION),
                 );
+            // Cutless: a curve that slows the clip down pushes the lane along
+            // too, as a constant rate does.
+            push_lane_after(timeline, &clip_id, old_end);
             Ok(Outcome {
                 created_id: None,
                 applied,
@@ -345,5 +337,24 @@ pub(super) fn apply(
         }
 
         _ => unreachable!("commands::apply routes only this module's commands here"),
+    }
+}
+
+/// Slowed down, a clip grows into what follows it: the rest of the lane moves
+/// along by the growth, as a freeze frame's does, rather than being covered.
+fn push_lane_after(timeline: &mut Timeline, clip_id: &str, old_end: f64) {
+    let Some(clip) = timeline.clip(clip_id) else {
+        return;
+    };
+    let (track_id, start, duration) = (clip.track_id.clone(), clip.start, clip.duration);
+    let grow = start + duration - old_end;
+    if grow > 0.0 && !timeline.is_free(&track_id, start, duration, &[clip_id]) {
+        for other in timeline.clips_where(|other| {
+            other.id != clip_id
+                && other.track_id == track_id
+                && other.start >= old_end - crate::placement::TOUCH
+        }) {
+            other.start += grow;
+        }
     }
 }
