@@ -13,13 +13,22 @@ pub mod speech;
 
 /// Куда уходят запросы редактору: сейчас API без окна, на этапе моста — открытое окно.
 pub trait Editor {
-    /// Выполняет один запрос API и возвращает ответ как есть.
-    fn dispatch(&mut self, request: concat_api::Request) -> concat_api::Response;
+    /// Выполняет один запрос API: ответ как JSON или ошибка API.
+    fn dispatch(&mut self, request: concat_api::Request) -> Result<Value, concat_api::ApiError>;
 }
 
 impl Editor for concat_api::Api {
-    fn dispatch(&mut self, request: concat_api::Request) -> concat_api::Response {
-        concat_api::Api::dispatch(self, request)
+    fn dispatch(&mut self, request: concat_api::Request) -> Result<Value, concat_api::ApiError> {
+        answer(concat_api::Api::dispatch(self, request))
+    }
+}
+
+/// Ответ API в виде JSON — так его отдают и своя сессия, и сокет окна.
+pub fn answer(response: concat_api::Response) -> Result<Value, concat_api::ApiError> {
+    match response {
+        concat_api::Response::Result(reply) => serde_json::to_value(reply)
+            .map_err(|error| concat_api::ApiError::failed(error.to_string())),
+        concat_api::Response::Error(error) => Err(error),
     }
 }
 
@@ -114,12 +123,9 @@ impl ToolContext<'_> {
 
     /// Запрос редактору; ответ — JSON ответа или ошибка редактора текстом.
     pub fn call(&mut self, request: concat_api::Request) -> Result<Value, ToolError> {
-        match self.editor.dispatch(request) {
-            concat_api::Response::Result(reply) => {
-                serde_json::to_value(reply).map_err(|error| ToolError::Failed(error.to_string()))
-            }
-            concat_api::Response::Error(error) => Err(ToolError::Editor(error.to_string())),
-        }
+        self.editor
+            .dispatch(request)
+            .map_err(|error| ToolError::Editor(error.to_string()))
     }
 }
 

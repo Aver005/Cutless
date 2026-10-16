@@ -63,9 +63,9 @@ mod tests {
     }
 
     impl crate::Editor for Mock {
-        fn dispatch(&mut self, request: Request) -> Response {
+        fn dispatch(&mut self, request: Request) -> Result<serde_json::Value, ApiError> {
             self.seen.push(request);
-            self.reply.clone()
+            crate::answer(self.reply.clone())
         }
     }
 

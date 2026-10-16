@@ -898,7 +898,10 @@ mod tests {
     struct NullEditor;
 
     impl Editor for NullEditor {
-        fn dispatch(&mut self, _request: Request) -> Response {
+        fn dispatch(
+            &mut self,
+            _request: Request,
+        ) -> Result<serde_json::Value, concat_api::ApiError> {
             panic!("the editor should not be asked");
         }
     }

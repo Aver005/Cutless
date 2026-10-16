@@ -360,9 +360,9 @@ mod tests {
     }
 
     impl EditorTrait for Fake {
-        fn dispatch(&mut self, request: Request) -> Response {
+        fn dispatch(&mut self, request: Request) -> Result<serde_json::Value, ApiError> {
             self.calls.push(request.clone());
-            match request {
+            crate::answer(match request {
                 Request::ProjectGet { .. } => {
                     Response::Result(Reply::View(Box::new(self.view(None))))
                 }
@@ -375,7 +375,7 @@ mod tests {
                     }
                 },
                 _ => Response::Error(ApiError::failed("unsupported request in tests")),
-            }
+            })
         }
     }
 
