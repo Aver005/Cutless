@@ -549,7 +549,7 @@ fn select_language(
 /// keeps a run from landing right on the limit.
 fn audio_chunks(total: usize, max_audio_ms: i64) -> Vec<Range<usize>> {
     if max_audio_ms <= 0 || total == 0 {
-        return vec![0..total];
+        return std::iter::once(0..total).collect();
     }
     let limit = (max_audio_ms as u64).saturating_mul(SAMPLES_PER_MS as u64);
     let margin = (JOINT_MS * SAMPLES_PER_MS) as u64;

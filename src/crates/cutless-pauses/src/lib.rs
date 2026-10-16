@@ -98,7 +98,7 @@ pub fn analyze_pcm(samples: &[f32], rate: u32, settings: &PauseSettings) -> Anal
     let (noise_floor_db, speech_db) = levels_stats(&levels);
     let threshold_db = settings
         .threshold_db
-        .unwrap_or_else(|| noise_floor_db + (speech_db - noise_floor_db) * AUTO_FRACTION);
+        .unwrap_or(noise_floor_db + (speech_db - noise_floor_db) * AUTO_FRACTION);
     // Автопорог на однородном звуке не отделяет речь от шума — пауз нет.
     let range_is_wide =
         settings.threshold_db.is_some() || (speech_db - noise_floor_db) >= MIN_DYNAMIC_RANGE_DB;
