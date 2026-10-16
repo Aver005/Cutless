@@ -1118,9 +1118,10 @@ export component StartScreen inherits Rectangle {
                             // which at 34px is a point. A phone gets it at
                             // 26px, still the largest thing on its screen
                             // and no longer half of it.
+                            font-family: Theme.font-display;
                             font-size: root.narrow ? 26px : Theme.fs-display;
                             font-weight: Theme.weight-display;
-                            letter-spacing: root.narrow ? -0.6px : -1px;
+                            letter-spacing: 0px;
                             vertical-alignment: center;
                             wrap: word-wrap;
                         }

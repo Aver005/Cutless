@@ -52,7 +52,7 @@ export global Theme {
     /// Settings > Appearance picks it (lib.rs, `on_settings_accent_changed`)
     /// the way it picks `dark`, and it retones the window the same way.
     /// Remembered by name rather than by number, so a list that grows or
-    /// reorders keeps everyone's choice; 0 is Lime, the default. One past
+    /// reorders keeps everyone's choice; 0 is Ocean, the default. One past
     /// the last name is the custom colour, `accent-custom`.
     in-out property <int> accent-choice: 0;
     /// A colour picked by hand in place of any on the list. Read only while
@@ -69,7 +69,7 @@ export global Theme {
     /// name is the English word Settings shows for it, and the id it is
     /// remembered under in settings.json, lower-cased; the dialog holds the
     /// same list wrapped for translation, in this order.
-    out property <[string]> accent-names: ["Lime", "Sky", "Violet", "Rose", "Amber", "Mint"];
+    out property <[string]> accent-names: ["Ocean", "Sky", "Violet", "Rose", "Amber", "Mint"];
     /// The playhead's colour when one was picked by hand in Settings >
     /// Appearance, in place of the palette's own. Read only while
     /// `playhead-is-custom`, and one colour under both palettes, for the
@@ -98,22 +98,23 @@ export global Theme {
     // technical` is for timecode, the ruler, clip labels, paths, dimensions,
     // counts — anything you read as a *value* rather than as language.
     //
-    // Both are Hanken Grotesk, the one face this build bundles (app.slint).
-    // The split between the roles stays so that the two can differ again
-    // without touching a single element.
-    out property <string> font: "Hanken Grotesk";
-    out property <string> font-technical: "Hanken Grotesk";
+    // Cutless: Geologica carries the interface and IBM Plex Sans the values;
+    // `font-display` (Unbounded) is the launch heading's. All three are
+    // bundled as static instances (app.slint, ui/fonts).
+    out property <string> font: "Geologica";
+    out property <string> font-technical: "IBM Plex Sans";
+    out property <string> font-display: "Unbounded";
     /// The scale. `fs` is the body size everything inherits; the two either
     /// side of it are the dense readout and the panel title. `xl` is for the
     /// few lines that are content rather than chrome — a project's name in a
     /// list — and `display` is the launch screen's heading and nothing else.
-    out property <length> fs-xs: 10px;
-    out property <length> fs-sm: 11px;
-    out property <length> fs: 12px;
-    out property <length> fs-lg: 13px;
-    out property <length> fs-xl: 14px;
-    out property <length> fs-input: 15px;
-    out property <length> fs-display: 34px;
+    out property <length> fs-xs: 9.5px;
+    out property <length> fs-sm: 10px;
+    out property <length> fs: 11px;
+    out property <length> fs-lg: 12px;
+    out property <length> fs-xl: 13px;
+    out property <length> fs-input: 14px;
+    out property <length> fs-display: 32px;
 
     // The weights the design actually calls for, uncompensated.
     //
@@ -136,19 +137,19 @@ export global Theme {
     // ── shape ────────────────────────────────────────────────────────────
     //
     // radii
-    out property <length> r-xs: 3px;
-    out property <length> r-sm: 5px;
-    out property <length> r: 7px;
-    out property <length> r-lg: 12px;
+    out property <length> r-xs: 1px;
+    out property <length> r-sm: 1px;
+    out property <length> r: 2px;
+    out property <length> r-lg: 2px;
     /// The dialog sheet, and nothing smaller. A modal is the largest rounded
     /// thing in the window and wants a corner to match.
-    out property <length> r-xl: 16px;
+    out property <length> r-xl: 3px;
 
     // metrics
-    out property <length> h: 28px;        // standard control height
-    out property <length> gap: 6px;
-    out property <length> pad: 14px;      // panel horizontal padding
-    out property <length> label-w: 62px;
+    out property <length> h: 24px;        // standard control height
+    out property <length> gap: 4px;
+    out property <length> pad: 16px;      // panel horizontal padding
+    out property <length> label-w: 82px;
 
     // ── surfaces ─────────────────────────────────────────────────────────
     out property <color> panel: dark ? Dark.panel : Light.panel;

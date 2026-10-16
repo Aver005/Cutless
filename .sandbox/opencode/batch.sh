@@ -16,6 +16,7 @@ for file in "$PROMPTS"/*.md; do
   while (( $(jobs -rp | wc -l) >= JOBS )); do wait -n || true; done
   # Задание <задача>.md работает в своём worktree $WT_ROOT/<задача>, если он есть.
   dir="${DS_DIR:-}"; [[ -d "$WT_ROOT/${name%.md}" ]] && dir="$WT_ROOT/${name%.md}"
-  "$SANDBOX/run.sh" "$TMP/$name" "$RESULTS/$name" ${dir:+"$dir"} &
+  # У каждого исполнителя своя база OpenCode: общая SQLite при параллельном запуске отвечает «database is locked».
+  DS_DATA="$SANDBOX/.data/${name%.md}" "$SANDBOX/run.sh" "$TMP/$name" "$RESULTS/$name" ${dir:+"$dir"} &
 done
 wait

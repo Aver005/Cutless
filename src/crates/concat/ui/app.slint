@@ -15,6 +15,16 @@ import "../../concat-text/fonts/HankenGrotesk-Medium.ttf";
 import "../../concat-text/fonts/HankenGrotesk-SemiBold.ttf";
 import "../../concat-text/fonts/HankenGrotesk-Bold.ttf";
 import "../../concat-text/fonts/HankenGrotesk-Italic.ttf";
+// Cutless: the interface face, the values face and the display face, as
+// static instances (ui/fonts, SIL Open Font License beside each).
+import "fonts/Geologica-Regular.ttf";
+import "fonts/Geologica-Medium.ttf";
+import "fonts/Geologica-SemiBold.ttf";
+import "fonts/Geologica-Bold.ttf";
+import "fonts/IBMPlexSans-Regular.ttf";
+import "fonts/IBMPlexSans-Medium.ttf";
+import "fonts/IBMPlexSans-SemiBold.ttf";
+import "fonts/Unbounded-Bold.ttf";
 
 import { Theme } from "theme/theme.slint";
 import { Bezier, Curves, Fmt, Focus, Payload } from "util.slint";
@@ -70,7 +80,7 @@ export component App inherits Window {
     // The taskbar's and Alt-Tab's picture on Windows, and the window
     // list's on X11. A Mac takes its Dock icon from the bundle and ignores
     // this; the .exe's own, for Explorer, is embedded by build.rs.
-    icon: @image-url("../../../../assets/icons/concat_logo_256.png");
+    icon: @image-url("../../../../assets/icons/cutless_logo_256.png");
     // Where the strip carries its own window buttons the platform's
     // decorations are not wanted, and this is the property Slint keeps
     // them off with: the winit backend re-applies `no-frame` to the

@@ -67,6 +67,18 @@ licence travels with it. The files and the full licence text are in
   1.1. The Regular, Medium, SemiBold, Bold and Italic static instances are
   embedded. See `fonts/LICENSE-HankenGrotesk.txt`.
 
+Cutless's interface faces, embedded by the window from `src/crates/concat/ui/fonts/`
+(static instances, each with its licence beside it):
+
+- **Geologica** — Copyright 2020 The Geologisk Project Authors
+  (https://github.com/monokromskriftforlag/geologisk), SIL Open Font License 1.1.
+  Regular, Medium, SemiBold and Bold. See `ui/fonts/OFL-geologica.txt`.
+- **IBM Plex Sans** — Copyright © 2017 IBM Corp. with Reserved Font Name "Plex",
+  SIL Open Font License 1.1. Regular, Medium and SemiBold. See `ui/fonts/OFL-ibmplexsans.txt`.
+- **Unbounded** — Copyright 2022 The Unbounded Project Authors
+  (https://github.com/googlefonts/unbounded), SIL Open Font License 1.1. Bold.
+  See `ui/fonts/OFL-unbounded.txt`.
+
 The base fonts every title can use, embedded by `concat-text` (`BASE_FONTS`)
 and registered with the window for the text presets. Each file's licence is
 beside it in `src/crates/concat-text/fonts/`, as `LICENSE-<Family>.txt`;

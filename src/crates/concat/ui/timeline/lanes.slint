@@ -1614,8 +1614,9 @@ export component Lanes inherits Rectangle {
                 x: root.at(self.seconds);
                 y: 0;
                 // Wide enough for the label it carries; the mark itself is the
-                // 1px child pinned at this cell's leading edge.
-                width: 64px;
+                // 1px child pinned at this cell's leading edge. Cutless: 80px
+                // fits the wider interface face and stays under the 90px step.
+                width: 80px;
                 height: root.ruler-height;
                 background: Colors.transparent;
                 // And none before the cut starts; see the grid.

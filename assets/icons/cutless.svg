@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <!-- Cutless: абордажная сабля по диагонали в плитке; цвета пресета «Ночной рейд». -->
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#122b2b"/>
+      <stop offset="1" stop-color="#06080b"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="96" height="96" rx="24" fill="url(#sea)"/>
+  <rect x="2.5" y="2.5" width="95" height="95" rx="23.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+  <g transform="translate(10 10) scale(0.8)">
+    <path d="M34 62 C 50 47, 67 30, 88 9 C 86 22, 76 38, 63 50 C 55 58, 47 64, 41 69 Z" fill="#e9f0f6"/>
+    <path d="M41 69 C 50 63, 60 55, 66 47" fill="none" stroke="#000000" stroke-opacity="0.2" stroke-width="1.5"/>
+    <path d="M25 58 C 16 74, 26 88, 44 80" fill="none" stroke="#d9b45a" stroke-width="6" stroke-linecap="round"/>
+    <path d="M29 59 L 46 75" stroke="#d9b45a" stroke-width="7" stroke-linecap="round"/>
+    <path d="M36 68 L 21 83" stroke="#239f90" stroke-width="7.5" stroke-linecap="round"/>
+    <circle cx="18.5" cy="85.5" r="5" fill="#d9b45a"/>
+  </g>
+</svg>
