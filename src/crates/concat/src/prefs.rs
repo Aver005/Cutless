@@ -41,6 +41,9 @@ pub struct Preferences {
     pub ui_scale: Option<u32>,
     /// The chosen transcriber model id, e.g. "base.en".
     pub transcriber_model: Option<String>,
+    /// A model file the user picked themselves, as an absolute path; not
+    /// project state, so it lives here. `None` until one is chosen.
+    pub transcriber_custom_model: Option<String>,
     /// The chosen speech model id.
     pub tts_model: Option<String>,
     /// The chosen Kokoro speaker id.

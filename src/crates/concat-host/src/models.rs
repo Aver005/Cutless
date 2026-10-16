@@ -141,7 +141,16 @@ pub fn preference() -> (SourcePreference, String) {
 /// source they came from.
 pub fn sources(file: &str, upstream: &str) -> Vec<String> {
     let (preference, custom_base) = preference();
-    sources_for(file, upstream, preference, &custom_base)
+    sources_for(file, upstream, preference, &custom_base, true)
+}
+
+/// Where to try for `file` when it has no Concat mirror at all - a model only
+/// its own upstream (Hugging Face) publishes. The same order as [`sources`],
+/// with the release URL left out: asking our release for a file that was
+/// never uploaded there would 404 every time before the real source.
+pub fn sources_upstream(file: &str, upstream: &str) -> Vec<String> {
+    let (preference, custom_base) = preference();
+    sources_for(file, upstream, preference, &custom_base, false)
 }
 
 fn sources_for(
@@ -149,8 +158,9 @@ fn sources_for(
     upstream: &str,
     preference: SourcePreference,
     custom_base: &str,
+    mirrored: bool,
 ) -> Vec<String> {
-    let github = mirror(file);
+    let github = mirrored.then(|| mirror(file));
     let hugging_face = (!HF_REPO.is_empty())
         .then(|| format!("https://huggingface.co/{HF_REPO}/resolve/main/{file}"));
     let custom = (!custom_base.is_empty()).then(|| format!("{custom_base}/{file}"));
@@ -175,7 +185,7 @@ fn sources_for(
         SourcePreference::Upstream => push(upstream.to_owned()),
         SourcePreference::Custom => custom.iter().cloned().for_each(&mut push),
     }
-    push(github);
+    github.iter().cloned().for_each(&mut push);
     hugging_face.iter().cloned().for_each(&mut push);
     push(upstream.to_owned());
     hf_mirrored.iter().cloned().for_each(&mut push);
@@ -349,6 +359,7 @@ mod tests {
             "https://elsewhere.example/model.onnx",
             SourcePreference::Auto,
             "",
+            true,
         );
         assert_eq!(
             list[0],
@@ -363,9 +374,24 @@ mod tests {
     }
 
     #[test]
+    fn an_unmirrored_model_asks_its_upstream_and_not_our_release() {
+        let upstream = "https://huggingface.co/handy-computer/parakeet/resolve/abc/model.gguf";
+        let list = sources_for("model.gguf", upstream, SourcePreference::Auto, "", false);
+        assert_eq!(list[0], upstream);
+        assert!(list.iter().all(|url| !url.contains(RELEASE)));
+        assert!(
+            list.iter()
+                .any(|url| url.starts_with("https://hf-mirror.com/")),
+            "the Hugging Face mirror is still offered"
+        );
+        // The public entry point agrees.
+        assert!(sources_upstream("model.gguf", upstream).contains(&upstream.to_owned()));
+    }
+
+    #[test]
     fn a_hugging_face_upstream_is_also_offered_through_hf_mirror() {
         let upstream = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin";
-        let list = sources_for("ggml-tiny.bin", upstream, SourcePreference::Auto, "");
+        let list = sources_for("ggml-tiny.bin", upstream, SourcePreference::Auto, "", true);
         assert_eq!(list.len(), 3);
         assert_eq!(list[1], upstream);
         assert_eq!(
@@ -373,7 +399,13 @@ mod tests {
             "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
         );
         // and first, when that is the preference
-        let list = sources_for("ggml-tiny.bin", upstream, SourcePreference::HfMirror, "");
+        let list = sources_for(
+            "ggml-tiny.bin",
+            upstream,
+            SourcePreference::HfMirror,
+            "",
+            true,
+        );
         assert!(list[0].starts_with("https://hf-mirror.com/"));
         assert_eq!(list.len(), 3);
         assert_eq!(hf_mirror("https://github.com/x/y"), None);
@@ -386,6 +418,7 @@ mod tests {
             "https://elsewhere.example/model.onnx",
             SourcePreference::Custom,
             "https://models.example/concat",
+            true,
         );
         assert_eq!(list[0], "https://models.example/concat/model.onnx");
         assert_eq!(list.len(), 3);
@@ -394,11 +427,18 @@ mod tests {
             "https://elsewhere.example/model.onnx",
             SourcePreference::Upstream,
             "https://models.example/concat",
+            true,
         );
         assert_eq!(list[0], "https://elsewhere.example/model.onnx");
         assert_eq!(list[2], "https://models.example/concat/model.onnx");
         // a custom preference with no base is a plain automatic
-        let list = sources_for("m", "https://u.example/m", SourcePreference::Custom, "");
+        let list = sources_for(
+            "m",
+            "https://u.example/m",
+            SourcePreference::Custom,
+            "",
+            true,
+        );
         assert_eq!(list.len(), 2);
     }
 

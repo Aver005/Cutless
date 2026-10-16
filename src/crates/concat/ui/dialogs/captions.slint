@@ -35,6 +35,11 @@ export struct CaptionsSheetData {
     text: string,
     /// Row in the installed transcriber list.
     model: int,
+    /// The languages on offer: Auto first, then the chosen model's own codes
+    /// (or a short popular list until a model's languages are known).
+    languages: [string],
+    /// Row in `languages`.
+    language: int,
     /// 0 Bottom, 1 Centre, 2 Top
     placement: int,
     /// 0 Small, 1 Medium, 2 Large
@@ -66,6 +71,7 @@ export component CaptionsDialog inherits Modal {
     callback source-changed(index: int);
     callback text-edited(text: string);
     callback model-changed(index: int);
+    callback language-changed(index: int);
     callback placement-changed(index: int);
     callback size-changed(index: int);
     callback begin();
@@ -144,6 +150,16 @@ export component CaptionsDialog inherits Modal {
                     placeholder: I18n.t("common.noneInstalled");
                     enabled: root.models.length > 0;
                     changed(index) => { root.model-changed(index); }
+                }
+            }
+
+            DialogRow {
+                label: I18n.t("settings.language");
+                Select {
+                    options: root.data.languages;
+                    current: root.data.language;
+                    enabled: root.data.languages.length > 0;
+                    changed(index) => { root.language-changed(index); }
                 }
             }
 
