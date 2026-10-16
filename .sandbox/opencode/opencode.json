@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "playwright": { "enabled": false },
+    "chrome-devtools": { "enabled": false },
+    "outline": { "enabled": false },
+    "shadcn": { "enabled": false },
+    "socket": { "enabled": false },
+    "semgrep": { "enabled": false },
+    "lucide-icons": { "enabled": false },
+    "flowbite": { "enabled": false }
+  },
+  "permission": {
+    "playwright_*": "deny",
+    "chrome-devtools_*": "deny"
+  }
+}
