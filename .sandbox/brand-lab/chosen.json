@@ -1,0 +1,16 @@
+{
+  "name": "Ночной рейд (мой)",
+  "logo": 1,
+  "colors": {
+    "page": "#06080b", "panel": "#0e1217", "raised": "#151b22", "well": "#090c10", "field": "#18202a",
+    "line": "#7fb8d6", "fg": "#eaf2f7", "fg-muted": "#8ea0ad", "fg-dim": "#56656f", "accent": "#2fd4c0",
+    "playhead": "#2fd4c0", "danger": "#ff6b6b", "stage": "#000000", "lane": "#0b0f13",
+    "kind-video": "#2f6fc4", "kind-audio": "#2cbf95", "kind-text": "#c45c95", "kind-image": "#8f6ee0",
+    "field-hover": "#262d37", "field-active": "#383f48", "fg-hot": "#ffffff", "accent-soft": "rgba(47,212,192,0.2)",
+    "on-accent": "#071e1b", "lane-alt": "#111519", "ruler": "#090c10", "kind-video-well": "#152a45",
+    "kind-audio-well": "#143d35", "danger-wash": "#301e23"
+  },
+  "shape": { "r": 2, "r-lg": 2, "h": 24, "gap": 4, "pad": 16, "panel-gap": 4, "fs": 11, "label-w": 82,
+             "border-w": 0, "border-a": 0, "shadow": 64, "glow": 16 },
+  "fonts": { "font": "Geologica", "display": "Unbounded", "mono": "IBM Plex Sans" }
+}
