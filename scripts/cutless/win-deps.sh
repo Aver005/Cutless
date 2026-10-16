@@ -83,6 +83,8 @@ export FFMPEG_DIR='$(win "$ffmpeg_dir")'
 export LIBCLANG_PATH='$(win "$vendor/llvm/bin")'
 export ORT_LIB_LOCATION='$(win "$ort_lib")'
 export ORT_PREFER_DYNAMIC_LINK=1
+# rustc на огромном коде окна, сгенерированном Slint, иначе падает с переполнением стека.
+export RUST_MIN_STACK=536870912
 export SHERPA_ONNX_LIB_DIR='$(win "$vendor/sherpa/libs")'
 export PATH="$path_add:\$PATH"
 EOF
@@ -93,6 +95,7 @@ EOF
 \$env:LIBCLANG_PATH = '$(win "$vendor/llvm/bin")'
 \$env:ORT_LIB_LOCATION = '$(win "$ort_lib")'
 \$env:ORT_PREFER_DYNAMIC_LINK = '1'
+\$env:RUST_MIN_STACK = '536870912'
 \$env:SHERPA_ONNX_LIB_DIR = '$(win "$vendor/sherpa/libs")'
 \$env:PATH = '$ps_path;' + \$env:PATH
 EOF

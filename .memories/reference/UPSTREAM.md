@@ -102,3 +102,6 @@ cd src && cargo fmt --check && cargo clippy --all-targets -- -D warnings && carg
 | Импорт и экспорт SRT | Частый запрос, в коде нет |
 | Настраиваемая идентичность для форков | Их `docs/upstream/TRADEMARK.md` требует от форков переименования |
 | Адресация эффектов по id и проверка `revision` | Чинит гонки при внешних правках |
+| `animate = true` у glow, bloom-pulse, chromatic-aberration, motion-blur, gaussian-blur, vignette, fisheye, pixelate, film-grain; у glow `min = 0` (проба минимума — тождество) | Рендер и так играет ключи любого параметра, флаг лишь прятал ромбики; glow 0 нужен ударам. Правки в их манифестах — будущий конфликт при синке |
+| `params` в `Command::AddLayerClip` | Слой с настроенными ручками одной командой, без второго шага undo |
+| `Command::SetKeySpan` (ключи отрезком без склейки по `KEY_EPSILON`) | Ключ на каждый кадр длинного клипа сейчас схлопывается: допуск 0,002 доли клипа — 3,6 кадра на 60 с |
