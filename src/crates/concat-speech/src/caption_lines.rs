@@ -6,7 +6,7 @@
 //! Nemotron отдаёт всю фразу одним сегментом, поэтому одну длинную плашку
 //! режем по словам: по длине, времени, паузам и концам предложений.
 
-use concat_speech::transcribe::{Segment, Word};
+use crate::transcribe::{Segment, Word};
 
 /// Настройки нарезки: сколько влезает в титр и где рвать.
 #[derive(Clone, Debug)]
@@ -178,7 +178,7 @@ fn stretch_short(lines: &mut [CaptionLine], rules: &LineRules) {
 #[cfg(test)]
 mod tests {
     use super::{CaptionLine, LineRules, caption_lines};
-    use concat_speech::transcribe::{Segment, Word};
+    use crate::transcribe::{Segment, Word};
 
     /// Одно слово с таймкодами.
     fn word(text: &str, start: f64, end: f64) -> Word {

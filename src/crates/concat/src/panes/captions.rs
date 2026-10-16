@@ -23,11 +23,11 @@ use concat_speech::transcribe::Segment;
 use crate::host::{on_ui_in_project, spawn_in_project};
 use crate::i18n::{Language, t, tf};
 use crate::panes::Msg;
-use crate::panes::caption_lines::{LineRules, caption_lines};
 use crate::panes::pace::{Pace, Stage, Timings};
 use crate::panes::settings::installed;
 use crate::studio::Studio;
 use crate::ui::CaptionsSheetData;
+use concat_speech::caption_lines::{LineRules, caption_lines};
 
 /// Where a caption sits, by the sheet's row: a frame-height fraction from
 /// the centre, positive down. Bottom, centre, top.
