@@ -23,6 +23,7 @@ use concat_speech::transcribe::Segment;
 use crate::host::{on_ui_in_project, spawn_in_project};
 use crate::i18n::{Language, t, tf};
 use crate::panes::Msg;
+use crate::panes::caption_lines::{LineRules, caption_lines};
 use crate::panes::pace::{Pace, Stage, Timings};
 use crate::panes::settings::installed;
 use crate::studio::Studio;
@@ -207,19 +208,17 @@ impl CaptionsPane {
                         };
                         let look = subject.look;
                         let base = studio.prefs.title_style.clone();
-                        let commands: Vec<Command> = segments
+                        let lines = caption_lines(&segments, &LineRules::default());
+                        let commands: Vec<Command> = lines
                             .into_iter()
-                            .filter_map(|segment| {
-                                let text = segment.text.trim().to_owned();
-                                (!text.is_empty()).then(|| {
-                                    caption_clip(
-                                        text,
-                                        subject.start + segment.start / subject.speed,
-                                        ((segment.end - segment.start) / subject.speed).max(0.2),
-                                        look,
-                                        base.as_ref(),
-                                    )
-                                })
+                            .map(|line| {
+                                caption_clip(
+                                    line.text,
+                                    subject.start + line.start / subject.speed,
+                                    ((line.end - line.start) / subject.speed).max(0.2),
+                                    look,
+                                    base.as_ref(),
+                                )
                             })
                             .collect();
                         let count = commands.len();
