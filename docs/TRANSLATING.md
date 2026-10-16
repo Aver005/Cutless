@@ -44,9 +44,9 @@ restart the app; the language appears in Settings.
 
 | Platform | Folder |
 |---|---|
-| macOS | `~/Library/Application Support/app.concat.editor/locales/` |
-| Linux | `~/.config/app.concat.editor/locales/` |
-| Windows | `%APPDATA%\app.concat.editor\locales\` |
+| macOS | `~/Library/Application Support/app.cutless.editor/locales/` |
+| Linux | `~/.config/app.cutless.editor/locales/` |
+| Windows | `%APPDATA%\app.cutless.editor\locales\` |
 
 A file there with the code of a language Concat ships lays its lines over
 the shipped ones, so a correction is a file holding only the lines that

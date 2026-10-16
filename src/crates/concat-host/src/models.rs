@@ -26,6 +26,7 @@
 
 use std::path::Path;
 
+// Models are still fetched from upstream's mirror for now; a Cutless mirror comes later.
 /// The repository the mirror lives on.
 pub const REPO: &str = "jub0t/Concat";
 

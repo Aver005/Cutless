@@ -75,12 +75,12 @@ fn main() {
         let icon = "../../../assets/icons/cutless.ico";
         println!("cargo:rerun-if-changed={icon}");
         // The file's name and description as Windows shows them in its
-        // properties, and as code signing checks them: "Concat" in every
+        // properties, and as code signing checks them: "Cutless" in every
         // build, where the default would be the crate's lower-case name.
         winresource::WindowsResource::new()
             .set_icon(icon)
-            .set("ProductName", "Concat")
-            .set("FileDescription", "Concat")
+            .set("ProductName", "Cutless")
+            .set("FileDescription", "Cutless")
             .set(
                 "LegalCopyright",
                 "Copyright 2026 Jareer and Concat contributors, AGPL-3.0-or-later",
