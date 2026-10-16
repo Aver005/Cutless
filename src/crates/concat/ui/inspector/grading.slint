@@ -3,8 +3,11 @@
 
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
-import { Fmt } from "../util.slint";
+import { Fmt, Focus } from "../util.slint";
+import { Glyph } from "../icons.slint";
 import { NumberField } from "../primitives/number-field.slint";
+import { Button } from "../primitives/modal.slint";
+import { IconButton, Section, SectionBody, SectionHeader } from "../primitives/panel.slint";
 import { ClipField } from "../timeline/model.slint";
 import { KeyCluster } from "controls.slint";
 
@@ -70,6 +73,26 @@ export struct WheelGroupData {
 export struct CurveGroupData {
     entry: int,
     curves: [CurveData],
+}
+
+/// One saved «My ship»: a named colour chain the panel's chips apply.
+export struct ShipData {
+    id: string,
+    name: string,
+}
+
+/// The saved ships, and what the colour panel's «My ship» row does.
+export global Ships {
+    /// The saved ships, oldest first, as the chips draw them.
+    in-out property <[ShipData]> ships;
+    /// A chip clicked: put its colour on the target clips.
+    callback apply(id: string);
+    /// Save the selected clip's colour as a new ship.
+    callback save();
+    /// A chip renamed to `name`.
+    callback rename(id: string, name: string);
+    /// A chip thrown away.
+    callback remove(id: string);
 }
 
 /// The colour a curve is drawn in: the first - luma - in the foreground's,
@@ -386,3 +409,215 @@ export component CurveEditor inherits VerticalLayout {
         }
     }
 }
+
+/// One saved ship as a chip: a click applies it, the mark opens a small menu
+/// to rename it or throw it away. Renaming happens in place, committing on
+/// blur like every other rename in the app.
+component ShipChip inherits Rectangle {
+    in property <ShipData> data;
+
+    callback apply();
+    callback renamed(name: string);
+    callback removed();
+
+    property <bool> menu-open: false;
+    property <bool> renaming: false;
+
+    height: 26px;
+    width: Math.max(64px, caption.preferred-width + 34px);
+    border-radius: Theme.r-sm;
+    background: body.has-hover ? Theme.field-hover : Theme.field;
+    border-width: 1px;
+    border-color: Theme.line;
+    clip: false;
+
+    caption := Text {
+        x: 8px;
+        width: parent.width - 32px;
+        y: (parent.height - self.height) / 2;
+        text: root.data.name;
+        color: Theme.fg;
+        font-size: Theme.fs-sm;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    body := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            if (!root.menu-open) { root.apply(); }
+        }
+    }
+
+    more := IconButton {
+        x: root.width - 26px;
+        y: (root.height - self.height) / 2;
+        glyph: Glyph.more;
+        icon-size: 12px;
+        label: I18n.t("ships.menu");
+        clicked => { root.menu-open = !root.menu-open; }
+    }
+
+    // The menu, hung under the chip; the root and its parent lay out without
+    // clipping, so it draws past the chip's own box.
+    if root.menu-open: Rectangle {
+        x: root.width - 140px;
+        y: root.height + 2px;
+        width: 140px;
+        height: 60px;
+        border-radius: Theme.r-sm;
+        background: Theme.panel;
+        border-width: 1px;
+        border-color: Theme.line;
+        clip: true;
+
+        VerticalLayout {
+            padding: 4px;
+            spacing: 2px;
+
+            Rectangle {
+                height: 26px;
+                border-radius: Theme.r-xs;
+                background: rename-touch.has-hover ? Theme.field : Colors.transparent;
+
+                Text {
+                    x: 8px;
+                    y: (parent.height - self.height) / 2;
+                    text: I18n.t("ships.rename");
+                    color: Theme.fg;
+                    font-size: Theme.fs-sm;
+                }
+
+                rename-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.menu-open = false;
+                        root.renaming = true;
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 26px;
+                border-radius: Theme.r-xs;
+                background: remove-touch.has-hover ? Theme.danger-soft : Colors.transparent;
+
+                Text {
+                    x: 8px;
+                    y: (parent.height - self.height) / 2;
+                    text: I18n.t("ships.delete");
+                    color: Theme.danger;
+                    font-size: Theme.fs-sm;
+                }
+
+                remove-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.menu-open = false;
+                        root.removed();
+                    }
+                }
+            }
+        }
+    }
+
+    // The name being typed over the chip; commits on blur.
+    if root.renaming: Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        border-radius: Theme.r-sm;
+        background: Theme.well;
+        border-width: 1px;
+        border-color: Theme.accent;
+        clip: true;
+
+        field := TextInput {
+            x: 6px;
+            width: parent.width - 12px;
+            y: (parent.height - self.height) / 2;
+            height: self.preferred-height;
+            text: root.data.name;
+            color: Theme.fg;
+            font-size: Theme.fs-sm;
+            single-line: true;
+            selection-background-color: Theme.accent;
+            selection-foreground-color: Theme.on-accent;
+
+            init => {
+                self.focus();
+                self.select-all();
+            }
+
+            changed has-focus => {
+                if (!self.has-focus && root.renaming) {
+                    root.renaming = false;
+                    root.renamed(self.text);
+                }
+            }
+
+            accepted => { Focus.release(); }
+
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.renaming = false;
+                    Focus.release();
+                    return EventResult.accept;
+                }
+                return EventResult.reject;
+            }
+        }
+    }
+}
+
+/// The colour panel's «My ship» section: a row of saved ships, a click to
+/// apply one, a button to save the selected clip's colour as a new ship.
+export component ShipPanel inherits VerticalLayout {
+    Section {
+        SectionHeader {
+            title: I18n.t("ships.title");
+        }
+
+        SectionBody {
+            VerticalLayout {
+                spacing: Theme.gap;
+
+                if Ships.ships.length == 0: HorizontalLayout {
+                    padding-left: Theme.pad;
+                    padding-right: Theme.pad;
+
+                    Text {
+                        text: I18n.t("ships.none");
+                        color: Theme.fg-dim;
+                        font-size: Theme.fs-sm;
+                    }
+                }
+
+                if Ships.ships.length > 0: HorizontalLayout {
+                    padding-left: Theme.pad;
+                    padding-right: Theme.pad;
+                    spacing: Theme.gap;
+
+                    for ship in Ships.ships: ShipChip {
+                        data: ship;
+                        apply() => { Ships.apply(ship.id); }
+                        renamed(name) => { Ships.rename(ship.id, name); }
+                        removed() => { Ships.remove(ship.id); }
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: Theme.pad;
+                    padding-right: Theme.pad;
+
+                    Button {
+                        label: I18n.t("ships.save");
+                        clicked => { Ships.save(); }
+                    }
+                }
+            }
+        }
+    }
+}
+

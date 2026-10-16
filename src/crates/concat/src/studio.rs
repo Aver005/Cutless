@@ -63,6 +63,7 @@ use crate::panes::settings::installed;
 use crate::platform;
 use crate::prefs::Preferences;
 use crate::presets::{self, TextPreset};
+use crate::ships;
 use crate::ui::*;
 
 /// The monitor's output sizes, matching the picker's rows.
@@ -614,6 +615,8 @@ pub struct Models {
     pub recents: Rc<VecModel<RecentProjectData>>,
     /// The Text page's presets, published once from the loaded list.
     pub text_presets: Rc<VecModel<TextPresetData>>,
+    /// The saved «My ship» chips, published from `Studio::ships`.
+    pub ships: Rc<VecModel<ShipData>>,
     /// The Latin ones, for the Text page's Styles shelf.
     pub style_presets: Rc<VecModel<TextPresetData>>,
     /// The rest, by the writing they are for, for its Languages shelf.
@@ -678,6 +681,7 @@ impl Models {
             dividers: Rc::new(VecModel::default()),
             recents: Rc::new(VecModel::default()),
             text_presets: Rc::new(VecModel::default()),
+            ships: Rc::new(VecModel::default()),
             style_presets: Rc::new(VecModel::default()),
             language_presets: Rc::new(VecModel::default()),
             font_families: Rc::new(VecModel::default()),
@@ -912,6 +916,9 @@ pub struct Studio {
     /// Every speaker the voice engine offers, in its own order.
     /// The looks the Text page offers; see `presets`.
     pub text_presets: Vec<TextPreset>,
+    /// The saved «My ship» colours the colour panel's chips apply; see
+    /// `ships`.
+    pub ships: Vec<ships::Ship>,
     /// The fonts in the app's own folder - imported from the Text
     /// inspector, or brought by a preset - as (family, file), read once at
     /// start and added to as files come in. Offered to every title; a
@@ -2071,6 +2078,7 @@ impl Studio {
         let languages = i18n::languages(&host.dirs);
         let recents = projects::list(&host.dirs.config);
         let text_presets = presets::all(&host.dirs);
+        let ships = ships::load(&host.dirs);
         let mut studio = Self {
             prefs,
             library: Default::default(),
@@ -2151,6 +2159,7 @@ impl Studio {
             meters: crate::meters::MeterFeed::default(),
             voiceover: crate::panes::voiceover::VoiceoverPane::default(),
             text_presets,
+            ships,
             installed_fonts: presets::installed_fonts(&host.dirs),
             system_fonts: Vec::new(),
             fonts_published: std::cell::Cell::new(None),
@@ -3678,6 +3687,112 @@ impl Studio {
             if video { "Effects" } else { "Audio" },
             if video { "Effects" } else { "Sound" },
         );
+    }
+
+    // ── «My ship» ──
+
+    /// The clips a ship lands on: the selected pictures, or every picture on
+    /// the active timeline when nothing at all is selected.
+    fn ship_targets(&self) -> Vec<String> {
+        if self.selection.is_empty() {
+            return self
+                .timeline()
+                .clips
+                .iter()
+                .filter(|clip| clip.kind.is_visual())
+                .map(|clip| clip.id.clone())
+                .collect();
+        }
+        self.selection
+            .iter()
+            .filter(|id| self.clip(id).is_some_and(|clip| clip.kind.is_visual()))
+            .cloned()
+            .collect()
+    }
+
+    /// The colour chain of the first selected picture, when one is selected.
+    fn selected_colour_chain(&self) -> Option<Vec<AppliedFilter>> {
+        let clip = self
+            .selection
+            .iter()
+            .filter_map(|id| self.clip(id))
+            .find(|clip| clip.kind.is_visual())?;
+        Some(ships::colour_chain(&clip.video_effects))
+    }
+
+    /// Writes the ships to disk; a failure is said and nothing else.
+    fn persist_ships(&mut self) {
+        if let Err(error) = ships::save(&self.host.dirs, &self.ships) {
+            self.notify(&error.to_string(), true);
+        }
+    }
+
+    /// Puts ship `id` on the target clips as one undo step: the clip's colour
+    /// is replaced, its other effects kept.
+    pub fn apply_ship(&mut self, id: &str) {
+        let Some(ship) = self.ships.iter().find(|ship| ship.id == id).cloned() else {
+            return;
+        };
+        let targets = self.ship_targets();
+        if targets.is_empty() {
+            self.notify(&t("ships.nothingToApply"), true);
+            return;
+        }
+        let mut commands: Vec<Command> = Vec::new();
+        for clip_id in &targets {
+            let Some(clip) = self.clip(clip_id) else {
+                continue;
+            };
+            let effects = ships::with_ship(&clip.video_effects, &ship);
+            if effects == clip.video_effects {
+                continue;
+            }
+            commands.push(Command::UpdateClip {
+                clip_id: clip_id.clone(),
+                patch: ClipPatch {
+                    video_effects: Some(effects),
+                    ..ClipPatch::default()
+                },
+            });
+        }
+        if commands.is_empty() {
+            return;
+        }
+        let command = if commands.len() == 1 {
+            commands.remove(0)
+        } else {
+            Command::Batch { commands }
+        };
+        self.apply(command);
+    }
+
+    /// Saves the selected clip's colour as a new ship, named «Ship N».
+    pub fn save_ship(&mut self) {
+        let Some(effects) = self.selected_colour_chain() else {
+            self.notify(&t("ships.selectClipFirst"), true);
+            return;
+        };
+        if effects.is_empty() {
+            self.notify(&t("ships.nothingToSave"), true);
+            return;
+        }
+        let name = tf("ships.defaultName", &[&ships::next_number(&self.ships)]);
+        ships::add(&mut self.ships, &name, effects);
+        self.persist_ships();
+    }
+
+    /// Gives ship `id` a new name; a blank one changes nothing.
+    pub fn rename_ship(&mut self, id: &str, name: &str) {
+        if ships::rename(&mut self.ships, id, name) {
+            self.persist_ships();
+        }
+    }
+
+    /// Throws ship `id` away.
+    pub fn remove_ship(&mut self, id: &str) {
+        if ships::remove(&mut self.ships, id) {
+            self.persist_ships();
+        }
     }
 
     /// The clip that ends where `clip` starts, on the same track - the
@@ -7728,6 +7843,17 @@ impl Studio {
     /// event of a scrub, a drag, a trim or a knob.
     pub fn publish_lanes(&self, app: &App, models: &Models) {
         let editor = app.global::<Editor>();
+        // The saved ships, for the colour panel's chips.
+        sync(
+            &models.ships,
+            self.ships
+                .iter()
+                .map(|ship| ShipData {
+                    id: ship.id.as_str().into(),
+                    name: ship.name.as_str().into(),
+                })
+                .collect(),
+        );
         let project = self.project();
         sync(
             &models.tabs,

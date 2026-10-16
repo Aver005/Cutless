@@ -50,6 +50,7 @@ pub use platform::{ExportPublisher, FilePicker, install_export_publisher, instal
 mod panes;
 mod prefs;
 mod presets;
+mod ships;
 mod source;
 mod studio;
 mod sysinfo;
@@ -346,6 +347,8 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
         editor.set_dividers(ModelRc::from(models.dividers.clone()));
         app.set_recents(ModelRc::from(models.recents.clone()));
         editor.set_text_presets(ModelRc::from(models.text_presets.clone()));
+        app.global::<Ships>()
+            .set_ships(ModelRc::from(models.ships.clone()));
         editor.set_style_presets(ModelRc::from(models.style_presets.clone()));
         editor.set_language_presets(ModelRc::from(models.language_presets.clone()));
         editor.set_font_families(ModelRc::from(models.font_families.clone()));
@@ -1160,6 +1163,23 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     editor.on_adjust_set(on_lanes!(|state, key: SharedString, value: f32| {
         state.adjust_set(key.as_str(), value);
     }));
+
+    // ── «My ship» ──
+    {
+        let ships = app.global::<Ships>();
+        ships.on_apply(on_lanes!(|state, id: SharedString| {
+            state.apply_ship(id.as_str());
+        }));
+        ships.on_save(on_lanes!(|state| {
+            state.save_ship();
+        }));
+        ships.on_rename(on_lanes!(|state, id: SharedString, name: SharedString| {
+            state.rename_ship(id.as_str(), name.as_str());
+        }));
+        ships.on_remove(on_lanes!(|state, id: SharedString| {
+            state.remove_ship(id.as_str());
+        }));
+    }
     editor.on_curve_point(on_lanes!(|state,
                                      entry: i32,
                                      key: SharedString,
