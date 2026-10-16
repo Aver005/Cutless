@@ -14,7 +14,6 @@
 //! The panes move here one at a time from the window's controller; the
 //! export sheet is the first, and the shape the rest follow.
 
-pub mod caption_lines;
 pub mod captions;
 pub mod export;
 pub mod media_bin;
