@@ -13,10 +13,11 @@ use std::time::Duration;
 
 use concat_host::AppDirs;
 use concat_project::Command;
-use concat_project::model::{Project, TextStyle};
+use concat_project::commands::links;
+use concat_project::model::{ClipKind, Project, TextStyle};
 use concat_speech::caption_lines::{LineRules, caption_lines};
 use concat_speech::catalog;
-use concat_speech::transcribe::{Segment, TranscribeRequest, Word};
+use concat_speech::transcribe::{ModelStatus, Segment, TranscribeRequest, Word};
 use concat_speech::{JobStage, Transcriber};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -156,7 +157,7 @@ impl Tool for SpeechModels {
         let loaded = self.state.transcriber.loaded_model();
 
         let mut text = format!("Speech models (folder {}).\n", status.models_dir);
-        let downloaded: Vec<&concat_speech::transcribe::ModelStatus> = status
+        let downloaded: Vec<&ModelStatus> = status
             .models
             .iter()
             .filter(|model| model.downloaded)
@@ -175,12 +176,12 @@ impl Tool for SpeechModels {
             }
         }
         if !status.found.is_empty() {
-            text.push_str("found on disk:\n");
+            text.push_str("found on disk (model_id: its path or file name):\n");
             for model in &status.found {
                 text.push_str(&format!("- {}  {}\n", model.id, model.label));
             }
         }
-        let missing: Vec<&concat_speech::transcribe::ModelStatus> = status
+        let missing: Vec<&ModelStatus> = status
             .models
             .iter()
             .filter(|model| !model.downloaded)
@@ -736,6 +737,9 @@ fn transcript(
 ) -> Result<Ready, ToolError> {
     let project = load_project(ctx)?;
     let clip = find_clip(&project, clip_id)?;
+    if let Some(hint) = muted_with_sound(&project, clip_id) {
+        return Err(ToolError::BadInput(hint));
+    }
 
     if let Some(cached) = state.find(&clip.media_path, clip.source_start, clip.window) {
         let reuse = match model_id {
@@ -869,8 +873,13 @@ fn resolve_model(dirs: &AppDirs, requested: Option<&str>) -> Result<String, Tool
         if catalog::known(id).is_some() || Path::new(id).is_absolute() {
             return Ok(id.to_owned());
         }
+        let status = Transcriber::status(dirs).map_err(ToolError::Failed)?;
+        if let Some(found) = status.found.iter().find(|model| names_model(model, id)) {
+            return Ok(found.id.clone());
+        }
         return Err(ToolError::BadInput(format!(
-            "unknown model {id:?} - see speech_models for ids"
+            "unknown model {id:?} - pass a catalogue id or a model found on disk (its path or \
+             file name), see speech_models"
         )));
     }
     let status = Transcriber::status(dirs).map_err(ToolError::Failed)?;
@@ -885,6 +894,15 @@ fn resolve_model(dirs: &AppDirs, requested: Option<&str>) -> Result<String, Tool
          Settings > Transcriber"
             .to_owned(),
     ))
+}
+
+/// Так ли зовут модель с диска: подпись или имя файла без расширения, без учёта регистра.
+fn names_model(model: &ModelStatus, name: &str) -> bool {
+    let stem = Path::new(&model.id)
+        .file_stem()
+        .and_then(|stem| stem.to_str());
+    model.label.eq_ignore_ascii_case(name)
+        || stem.is_some_and(|stem| stem.eq_ignore_ascii_case(name))
 }
 
 /// Проект из ответа редактора.
@@ -928,6 +946,40 @@ fn find_clip(project: &Project, clip_id: &str) -> Result<ClipRef, ToolError> {
         source_start: clip.source_start,
         window: clip.duration * clip.speed,
     })
+}
+
+/// Подсказка, если клип немой, а его звук разложен по связанным клипам: распознавать надо их.
+fn muted_with_sound(project: &Project, clip_id: &str) -> Option<String> {
+    let timeline = project
+        .timelines
+        .iter()
+        .find(|timeline| timeline.clip(clip_id).is_some())?;
+    let clip = timeline.clip(clip_id)?;
+    if clip.muted != Some(true) {
+        return None;
+    }
+    let link = links::link_of(clip)?;
+    let sounds: Vec<String> = timeline
+        .clips
+        .iter()
+        .filter(|other| {
+            other.id != clip.id
+                && other.kind == ClipKind::Audio
+                && links::link_of(other) == Some(link)
+        })
+        .map(|other| match other.audio_stream {
+            Some(stream) => format!("{} (stream {stream})", other.id),
+            None => other.id.clone(),
+        })
+        .collect();
+    if sounds.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "clip {clip_id} is muted: its sound is in the linked clips {}. Transcribe the one that \
+         carries the voice.",
+        sounds.join(", ")
+    ))
 }
 
 /// Компактный JSON расшифровки: клип, модель, язык и выбранные сегменты.
@@ -1374,6 +1426,82 @@ mod tests {
 
         go.send(()).expect("go");
         jobs.shutdown();
+    }
+
+    /// Немое видео со звуком в связанных клипах не распознаётся: подсказка называет звуковые клипы.
+    #[test]
+    fn a_muted_video_points_at_its_linked_sound_clips() {
+        use concat_project::model::{AudioTrack, MediaKind};
+
+        let root = scratch("muted");
+        let mut api = api(&root);
+        let location = root.to_string_lossy().into_owned();
+        dispatch(
+            &mut api,
+            Request::ProjectCreate {
+                location,
+                name: "Muted".to_owned(),
+                video: None,
+            },
+        );
+        let path = root.join("Muted").to_string_lossy().into_owned();
+        let track = |index: u32| AudioTrack {
+            index,
+            codec: "aac".to_owned(),
+            channels: 2,
+            sample_rate: 48_000,
+            title: String::new(),
+            language: String::new(),
+        };
+        let media = NewMedia {
+            path: MEDIA.to_owned(),
+            name: "a.mp4".to_owned(),
+            duration: Some(8.0),
+            kind: MediaKind::Video,
+            width: Some(1920),
+            height: Some(1080),
+            frame_rate: Some(30.0),
+            frame_rate_fraction: Some("30/1".to_owned()),
+            video_codec: Some("h264".to_owned()),
+            audio_codec: Some("aac".to_owned()),
+            has_audio: true,
+            audio_tracks: vec![track(1), track(2)],
+            origin: None,
+            color_space: Default::default(),
+        };
+        let added = dispatch(
+            &mut api,
+            Request::EditApply {
+                path: path.clone(),
+                command: Box::new(Command::AddMedia { item: media }),
+            },
+        );
+        let media_id = added["createdId"].as_str().expect("media id").to_owned();
+
+        let jobs = crate::Jobs::default();
+        let mut ctx = ToolContext {
+            editor: &mut api,
+            project: Some(path),
+            jobs: jobs.clone(),
+        };
+        let registry = crate::default_registry();
+        let placed = registry
+            .call(
+                &mut ctx,
+                "clip_add",
+                json!({ "media_id": media_id, "start": 0.0 }),
+            )
+            .expect("placed");
+        let video = placed.data["createdId"].as_str().expect("id").to_owned();
+
+        let error = registry
+            .call(&mut ctx, "transcribe", json!({ "clip_id": video }))
+            .expect_err("muted");
+        assert!(matches!(error, ToolError::BadInput(_)), "{error:?}");
+        let text = error.to_string();
+        assert!(text.contains("is muted"), "{text}");
+        assert!(text.contains("(stream 2)"), "{text}");
+        assert!(jobs.list().is_empty(), "nothing was started");
     }
 
     /// Ответ без расшифровки подсказывает сначала позвать transcribe.

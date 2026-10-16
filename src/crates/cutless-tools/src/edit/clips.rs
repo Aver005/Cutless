@@ -408,10 +408,14 @@ fn clip_add(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolE
                 clip_id: id.clone(),
             },
         )?;
-        let group = links::with_linked(view.project.active(), std::slice::from_ref(&id));
+        let sounds: Vec<String> =
+            links::with_linked(view.project.active(), std::slice::from_ref(&id))
+                .into_iter()
+                .filter(|linked| *linked != id)
+                .collect();
         text.push_str(&format!(
-            "; its {tracks} audio tracks are sound clips linked with it: {}",
-            group.join(", ")
+            "; the video is muted and its {tracks} audio tracks are sound clips linked with it: {}",
+            sounds.join(", ")
         ));
     }
     Ok(ToolOutput {
