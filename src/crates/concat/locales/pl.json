@@ -781,6 +781,8 @@
   "settings.accent": "Kolor akcentu",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "Adres",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "Ta kompilacja, {0}, jest nowsza niż jakiekolwiek wydanie.",
   "settings.amber": "Bursztyn",
   "settings.appearance": "Wygląd",

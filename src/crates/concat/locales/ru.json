@@ -781,6 +781,8 @@
   "settings.accent": "Акцент",
   "settings.addModelFile": "Добавить файл модели…",
   "settings.address": "Адрес",
+  "settings.agentsEdit": "Агенты могут править открытый проект",
+  "settings.agentsEditHint": "Агент через MCP правит проект на экране; Ctrl+Z отменяет его серию правок.",
   "settings.aheadOfReleases": "Эта сборка, {0}, новее любого выпуска.",
   "settings.amber": "Янтарь",
   "settings.appearance": "Оформление",

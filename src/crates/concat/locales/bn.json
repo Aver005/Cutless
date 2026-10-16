@@ -781,6 +781,8 @@
   "settings.accent": "অ্যাকসেন্ট",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "ঠিকানা",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "এই বিল্ড, {0}, যেকোনো রিলিজের চেয়ে নতুন।",
   "settings.amber": "অ্যাম্বার",
   "settings.appearance": "চেহারা",

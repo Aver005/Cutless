@@ -781,6 +781,8 @@
   "settings.accent": "强调色",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "地址",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "此构建 {0} 比任何已发布版本都新。",
   "settings.amber": "琥珀",
   "settings.appearance": "外观",

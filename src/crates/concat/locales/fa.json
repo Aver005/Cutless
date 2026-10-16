@@ -781,6 +781,8 @@
   "settings.accent": "رنگ تأکید",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "آدرس",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "این ساخت، {0}، از هر نسخهٔ منتشرشده جدیدتر است.",
   "settings.amber": "کهربایی",
   "settings.appearance": "ظاهر",

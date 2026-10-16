@@ -781,6 +781,8 @@
   "settings.accent": "강조색",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "주소",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "이 빌드 {0}은(는) 어떤 릴리스보다 새롭습니다.",
   "settings.amber": "앰버",
   "settings.appearance": "화면",

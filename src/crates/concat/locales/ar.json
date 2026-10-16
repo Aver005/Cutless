@@ -781,6 +781,8 @@
   "settings.accent": "لون التمييز",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "العنوان",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "هذا الإصدار، {0}، أحدث من أي إصدار منشور.",
   "settings.amber": "كهرماني",
   "settings.appearance": "المظهر",

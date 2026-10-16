@@ -781,6 +781,8 @@
   "settings.accent": "Vurgu",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "Adres",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "Bu yapı ({0}) yayımlanmış her sürümden daha yeni.",
   "settings.amber": "Amber",
   "settings.appearance": "Görünüm",

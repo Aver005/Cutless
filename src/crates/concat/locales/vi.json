@@ -781,6 +781,8 @@
   "settings.accent": "Màu nhấn",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "Địa chỉ",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "Bản dựng này ({0}) mới hơn mọi bản phát hành hiện có.",
   "settings.amber": "Hổ phách",
   "settings.appearance": "Giao diện",
