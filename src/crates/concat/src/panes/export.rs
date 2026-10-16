@@ -331,25 +331,13 @@ impl ExportPane {
             .unwrap_or(0)
     }
 
-    /// `short` scaled along the project's aspect and rounded to even
-    /// dimensions, which is what the encoder's chroma subsampling needs.
-    fn frame_for(studio: &Studio, short: u32) -> (u32, u32) {
-        let (project_w, project_h) = studio.output_size();
-        let (project_w, project_h) = (project_w.max(1) as f64, project_h.max(1) as f64);
-        let even = |side: f64| ((side / 2.0).round() as u32 * 2).max(2);
-        if project_w >= project_h {
-            (even(short as f64 * project_w / project_h), short)
-        } else {
-            (short, even(short as f64 * project_h / project_w))
-        }
-    }
-
     /// The frame the export renders at: the sheet's rung of the ladder,
     /// along the project's aspect.
     pub fn size(&self, studio: &Studio) -> (u32, u32) {
         let ladder = Self::ladder(studio);
         let short = ladder[self.resolution.min(ladder.len() - 1)];
-        Self::frame_for(studio, short)
+        let (project_w, project_h) = studio.output_size();
+        frame_for(project_w, project_h, short)
     }
 
     /// A rough size of the file at one quality tier, in bytes.
@@ -580,10 +568,11 @@ impl ExportPane {
             .into(),
             resolution: self.resolution as i32,
             resolutions: {
+                let (project_w, project_h) = studio.output_size();
                 let sizes: Vec<SharedString> = Self::ladder(studio)
                     .iter()
                     .map(|rung| {
-                        let (width, height) = Self::frame_for(studio, *rung);
+                        let (width, height) = frame_for(project_w, project_h, *rung);
                         format!("{width} × {height}").into()
                     })
                     .collect();
@@ -696,6 +685,20 @@ impl ExportPane {
     }
 }
 
+/// `short`, a frame's shorter side, scaled along the project's aspect
+/// `project_w` × `project_h`: the orientation is kept, so a 9:16 edit's
+/// 1080 is 1080 × 1920 and not 1920 × 1080, and both sides come out even -
+/// which is what the encoder's chroma subsampling needs.
+fn frame_for(project_w: u32, project_h: u32, short: u32) -> (u32, u32) {
+    let (across, down) = (project_w.max(1) as f64, project_h.max(1) as f64);
+    let even = |side: f64| ((side / 2.0).round() as u32 * 2).max(2);
+    if across >= down {
+        (even(short as f64 * across / down), even(short as f64))
+    } else {
+        (even(short as f64), even(short as f64 * down / across))
+    }
+}
+
 /// The typed name as the file's, or `None` for one that cannot be: empty
 /// once trimmed, a dot or two, or holding a character no file system
 /// here takes. The set is Windows' - a slash and a backslash, the colon,
@@ -745,5 +748,60 @@ mod tests {
         assert_eq!(ExportPane::rate_name((25, 1)), "25 fps");
         assert_eq!(ExportPane::rate_name((15, 1)), "15 fps");
         assert_eq!(ExportPane::rate_name((12500, 1000)), "12.5 fps");
+    }
+
+    /// The short side walks out along the project's own aspect, so an
+    /// upright edit exports upright - 1080 stays 1080 × 1920 - and a wide
+    /// one wide.
+    #[test]
+    fn the_export_frame_keeps_the_projects_orientation() {
+        // 9:16 upright: the short side is the width.
+        assert_eq!(frame_for(1080, 1920, 2160), (2160, 3840));
+        assert_eq!(frame_for(1080, 1920, 1440), (1440, 2560));
+        assert_eq!(frame_for(1080, 1920, 1080), (1080, 1920));
+        assert_eq!(frame_for(1080, 1920, 720), (720, 1280));
+        // 16:9 wide: the short side is the height.
+        assert_eq!(frame_for(1920, 1080, 1080), (1920, 1080));
+        assert_eq!(frame_for(1920, 1080, 720), (1280, 720));
+        // Square, and 4:3 either way.
+        assert_eq!(frame_for(1080, 1080, 1080), (1080, 1080));
+        assert_eq!(frame_for(1920, 1440, 1080), (1440, 1080));
+        assert_eq!(frame_for(1440, 1920, 1080), (1080, 1440));
+    }
+
+    /// The timeline's own rung comes out at the timeline's own size,
+    /// to the pixel: what an edit was cut at is what it exports at.
+    #[test]
+    fn the_export_frame_as_the_project_is_the_project() {
+        for (width, height) in [(1920, 1080), (1080, 1920), (1080, 1080), (1920, 1440)] {
+            assert_eq!(
+                frame_for(width, height, width.min(height)),
+                (width, height),
+                "{width} × {height}"
+            );
+        }
+    }
+
+    /// A side that does not land on a whole even pixel rounds to the
+    /// nearest even one rather than being cropped by the encoder.
+    #[test]
+    fn the_export_frame_is_always_even() {
+        // 1000 along 16:9 is 1777.8, so 1778 and not 1777.
+        assert_eq!(frame_for(1920, 1080, 1000), (1778, 1000));
+        // An odd short side is lifted to the even frame beside it too.
+        assert_eq!(frame_for(1920, 1080, 1081), (1922, 1082));
+        for (project_w, project_h, short) in [
+            (1080, 1920, 1081),
+            (999, 1920, 721),
+            (1080, 1919, 601),
+            (1919, 1081, 999),
+        ] {
+            let (width, height) = frame_for(project_w, project_h, short);
+            assert_eq!(
+                (width % 2, height % 2),
+                (0, 0),
+                "{project_w} × {project_h} at {short}"
+            );
+        }
     }
 }
