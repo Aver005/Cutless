@@ -19,6 +19,7 @@ use crate::model::{
 };
 
 mod audio;
+mod beats;
 mod clips;
 pub mod links;
 pub use clips::{consolidation_clips, why_not_merge};
@@ -800,6 +801,17 @@ pub enum Command {
         /// The keys the span holds afterwards; each is clamped into it.
         keys: Vec<keyspans::SpanKey>,
     },
+    /// Cutless: puts a media item's beat grid for one audio stream, or takes
+    /// it away. The grid is in seconds of the file; see `crate::beats`.
+    SetMediaBeats {
+        /// The media item. An unknown id is a no-op.
+        media_id: String,
+        /// The audio stream the grid was heard from; None for the first.
+        #[serde(default)]
+        stream: Option<u32>,
+        /// The grid, or None to drop it.
+        grid: Option<crate::beats::BeatGrid>,
+    },
 }
 
 /// What a command produced, beyond the new state: the ids it minted, so the
@@ -1032,6 +1044,9 @@ impl Command {
                 at, value, ease, ..
             } => bad([*at, *value]) || bad(ease.0),
             Command::ClearClipKey { at, .. } | Command::ClearEffectKey { at, .. } => bad([*at]),
+            Command::SetMediaBeats { grid, .. } => {
+                grid.as_ref().is_some_and(|grid| !grid.is_sane())
+            }
             Command::SetKeySpan { from, to, keys, .. } => {
                 bad([*from, *to])
                     || keys
@@ -1196,5 +1211,6 @@ pub fn apply(
         | Command::RestorePauses { .. }
         | Command::ConfirmPauses { .. }) => pauses::apply(project, mint, command),
         command @ Command::SetKeySpan { .. } => keyspans::apply(project, command),
+        command @ Command::SetMediaBeats { .. } => beats::apply(project, command),
     }
 }
