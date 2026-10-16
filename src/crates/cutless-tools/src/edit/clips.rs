@@ -140,7 +140,6 @@ pub(crate) fn register(registry: &mut Registry) {
 
 /// Вход `clips_split`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct SplitInput {
     clip_ids: Vec<String>,
     time: f64,
@@ -148,7 +147,6 @@ struct SplitInput {
 
 /// Вход `clip_trim`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TrimInput {
     clip_id: String,
     edge: TrimEdge,
@@ -159,14 +157,12 @@ struct TrimInput {
 
 /// Вход `clips_move`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct MoveInput {
     moves: Vec<MoveIn>,
 }
 
 /// Один сдвиг во входе.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct MoveIn {
     clip_id: String,
     start: f64,
@@ -176,7 +172,6 @@ struct MoveIn {
 
 /// Вход `clips_remove`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct RemoveInput {
     clip_ids: Vec<String>,
     #[serde(default)]
@@ -185,7 +180,6 @@ struct RemoveInput {
 
 /// Вход `clip_add`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct AddInput {
     media_id: String,
     start: f64,
@@ -195,7 +189,6 @@ struct AddInput {
 
 /// Вход `clip_volume`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct VolumeInput {
     clip_ids: Vec<String>,
     #[serde(default)]
@@ -208,7 +201,6 @@ struct VolumeInput {
 
 /// Вход `clip_transform`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TransformInput {
     clip_id: String,
     #[serde(default)]
@@ -274,6 +266,11 @@ fn clips_move(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, Too
     if input.moves.is_empty() {
         return Err(ToolError::BadInput("moves is empty".to_owned()));
     }
+    let wanted: Vec<(String, f64)> = input
+        .moves
+        .iter()
+        .map(|one| (one.clip_id.clone(), one.start))
+        .collect();
     let moves: Vec<ClipMove> = input
         .moves
         .into_iter()
@@ -283,8 +280,22 @@ fn clips_move(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, Too
             track_id: one.track_id.unwrap_or_default(),
         })
         .collect();
-    support::apply(ctx, Command::MoveClips { moves })?;
-    Ok(ToolOutput::text("moved"))
+    let view = support::apply(ctx, Command::MoveClips { moves })?;
+    // Редактор не даёт клипам наложиться и может оставить клип на месте: модель должна это знать.
+    let mut lines = Vec::new();
+    for (clip_id, start) in &wanted {
+        let actual = support::find_clip(&view.project, clip_id)?.start;
+        if (actual - start).abs() < 0.001 {
+            lines.push(format!("{clip_id} now starts at {}", support::time(actual)));
+        } else {
+            lines.push(format!(
+                "{clip_id} stays at {} (asked {}): it would overlap a clip on its track",
+                support::time(actual),
+                support::time(*start)
+            ));
+        }
+    }
+    Ok(ToolOutput::text(lines.join("\n")))
 }
 
 /// Удаляет клипы.

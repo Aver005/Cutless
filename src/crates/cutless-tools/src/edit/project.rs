@@ -114,7 +114,6 @@ struct OpenInput {
 
 /// Вход `project_create`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct CreateInput {
     location: String,
     name: String,
@@ -125,7 +124,6 @@ struct CreateInput {
 
 /// Вход `project_settings`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct SettingsInput {
     width: Option<u32>,
     height: Option<u32>,
@@ -134,7 +132,6 @@ struct SettingsInput {
 
 /// Вход `clip_detail`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct ClipInput {
     clip_id: String,
 }

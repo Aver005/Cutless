@@ -75,7 +75,6 @@ struct CatalogueInput {
 
 /// Вход `effect_apply`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct ApplyInput {
     clip_ids: Vec<String>,
     effect_id: String,
@@ -85,7 +84,6 @@ struct ApplyInput {
 
 /// Вход `effect_remove`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct RemoveInput {
     clip_id: String,
     effect_id: String,

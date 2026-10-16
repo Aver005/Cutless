@@ -523,10 +523,20 @@ mod tests {
                 json!({ "moves": [{ "clip_id": clip_id, "start": 0.5 }] }),
             )
             .expect("move");
+        // После разреза справа вплотную лежит хвост: редактор не даёт наложиться, клип
+        // остаётся на месте, и инструмент обязан сказать об этом модели.
+        let moved = registry
+            .call(
+                &mut ctx,
+                "clips_move",
+                json!({ "moves": [{ "clip_id": clip_id, "start": 0.5 }] }),
+            )
+            .expect("move again");
+        assert!(moved.text.contains("stays at"), "{}", moved.text);
         let detail = registry
             .call(&mut ctx, "clip_detail", json!({ "clip_id": clip_id }))
             .expect("detail");
-        assert_eq!(detail.data["start"], 0.5);
+        assert_eq!(detail.data["start"], 0.0);
         registry.call(&mut ctx, "undo", json!({})).expect("undo");
         registry.call(&mut ctx, "redo", json!({})).expect("redo");
 

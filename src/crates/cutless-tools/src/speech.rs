@@ -220,7 +220,6 @@ struct Transcribe {
 
 /// Вход `transcribe`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TranscribeInput {
     clip_id: String,
     #[serde(default)]
@@ -239,11 +238,11 @@ impl Tool for Transcribe {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "clipId": { "type": "string", "description": "The clip whose sound to transcribe." },
-                    "modelId": { "type": "string", "description": "Model id from speech_models; the first downloaded model when absent." },
+                    "clip_id": { "type": "string", "description": "The clip whose sound to transcribe." },
+                    "model_id": { "type": "string", "description": "Model id from speech_models; the first downloaded model when absent." },
                     "language": { "type": "string", "description": "Language code like \"ru\"; auto-detect when absent." }
                 },
-                "required": ["clipId"],
+                "required": ["clip_id"],
                 "additionalProperties": false
             }),
             class: ToolClass::Read,
@@ -290,7 +289,6 @@ struct TranscriptGet {
 
 /// Вход `transcript_get`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct GetInput {
     clip_id: String,
     #[serde(default)]
@@ -311,12 +309,12 @@ impl Tool for TranscriptGet {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "clipId": { "type": "string", "description": "The clip whose transcript to read." },
+                    "clip_id": { "type": "string", "description": "The clip whose transcript to read." },
                     "from": { "type": "number", "description": "Only segments ending after this timeline second." },
                     "to": { "type": "number", "description": "Only segments starting before this timeline second." },
                     "words": { "type": "boolean", "description": "Include per-word timings." }
                 },
-                "required": ["clipId"],
+                "required": ["clip_id"],
                 "additionalProperties": false
             }),
             class: ToolClass::Read,
@@ -370,7 +368,6 @@ struct TranscriptSearch {
 
 /// Вход `transcript_search`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct SearchInput {
     query: String,
     #[serde(default)]
@@ -388,7 +385,7 @@ impl Tool for TranscriptSearch {
                 "type": "object",
                 "properties": {
                     "query": { "type": "string", "description": "The phrase to look for." },
-                    "clipId": { "type": "string", "description": "Restrict to one clip; every cached transcript when absent." }
+                    "clip_id": { "type": "string", "description": "Restrict to one clip; every cached transcript when absent." }
                 },
                 "required": ["query"],
                 "additionalProperties": false
@@ -417,7 +414,7 @@ impl Tool for TranscriptSearch {
             for segment in &entry.segments {
                 if let Some(kind) = search::matches(&segment.text, &input.query) {
                     matches.push(json!({
-                        "clipId": entry.clip_id,
+                        "clip_id": entry.clip_id,
                         "start": segment.start,
                         "end": segment.end,
                         "text": segment.text,
@@ -435,7 +432,7 @@ impl Tool for TranscriptSearch {
         for hit in &matches {
             text.push_str(&format!(
                 "{}  {:.3}-{:.3}  {}\n",
-                hit["clipId"].as_str().unwrap_or("?"),
+                hit["clip_id"].as_str().unwrap_or("?"),
                 hit["start"].as_f64().unwrap_or(0.0),
                 hit["end"].as_f64().unwrap_or(0.0),
                 hit["text"].as_str().unwrap_or("")
@@ -456,7 +453,6 @@ struct CaptionsMake {
 
 /// Вход `captions_make`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct CaptionsInput {
     clip_id: String,
     #[serde(default)]
@@ -467,7 +463,7 @@ struct CaptionsInput {
 
 /// Стиль титра; заданные поля заменяют умолчания.
 #[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(default)]
 struct StyleInput {
     font_family: Option<String>,
     font_size: Option<f64>,
@@ -482,7 +478,7 @@ struct StyleInput {
 
 /// Правила нарезки титров; заданные поля заменяют умолчания.
 #[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(default)]
 struct RulesInput {
     max_chars: Option<usize>,
     max_seconds: Option<f64>,
@@ -501,20 +497,20 @@ impl Tool for CaptionsMake {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "clipId": { "type": "string", "description": "The clip whose words become captions." },
+                    "clip_id": { "type": "string", "description": "The clip whose words become captions." },
                     "style": {
                         "type": "object",
                         "description": "Title look; unset fields keep the default.",
                         "properties": {
-                            "fontFamily": { "type": "string" },
-                            "fontSize": { "type": "number", "description": "Cap height as a fraction of frame height." },
-                            "fontWeight": { "type": "number" },
+                            "font_family": { "type": "string" },
+                            "font_size": { "type": "number", "description": "Cap height as a fraction of frame height." },
+                            "font_weight": { "type": "number" },
                             "color": { "type": "string", "description": "CSS hex fill colour." },
-                            "strokeWidth": { "type": "number" },
-                            "strokeColor": { "type": "string" },
+                            "stroke_width": { "type": "number" },
+                            "stroke_color": { "type": "string" },
                             "background": { "type": "string", "description": "Solid plate colour, empty for none." },
                             "shadow": { "type": "boolean" },
-                            "offsetY": { "type": "number", "description": "Frame-height fraction from centre, positive down." }
+                            "offset_y": { "type": "number", "description": "Frame-height fraction from centre, positive down." }
                         },
                         "additionalProperties": false
                     },
@@ -522,16 +518,16 @@ impl Tool for CaptionsMake {
                         "type": "object",
                         "description": "How words are cut into lines.",
                         "properties": {
-                            "maxChars": { "type": "integer" },
-                            "maxSeconds": { "type": "number" },
-                            "pauseSeconds": { "type": "number" },
-                            "minSeconds": { "type": "number" },
-                            "commaAfterChars": { "type": "integer" }
+                            "max_chars": { "type": "integer" },
+                            "max_seconds": { "type": "number" },
+                            "pause_seconds": { "type": "number" },
+                            "min_seconds": { "type": "number" },
+                            "comma_after_chars": { "type": "integer" }
                         },
                         "additionalProperties": false
                     }
                 },
-                "required": ["clipId"],
+                "required": ["clip_id"],
                 "additionalProperties": false
             }),
             class: ToolClass::Edit,
@@ -846,7 +842,7 @@ fn transcript_json(entry: &CachedTranscript, segments: &[Segment], words: bool) 
         })
         .collect();
     json!({
-        "clipId": entry.clip_id,
+        "clip_id": entry.clip_id,
         "model": entry.model,
         "language": entry.language,
         "segments": segments,
@@ -1093,7 +1089,7 @@ mod tests {
             project: Some(path),
         };
         let output = tool
-            .call(&mut ctx, json!({ "clipId": clip_id, "words": true }))
+            .call(&mut ctx, json!({ "clip_id": clip_id, "words": true }))
             .expect("get");
         let segments = output.data["segments"].as_array().expect("segments");
         assert_eq!(segments.len(), 1);
@@ -1119,7 +1115,7 @@ mod tests {
             project: Some(path.clone()),
         };
         let output = tool
-            .call(&mut ctx, json!({ "clipId": clip_id }))
+            .call(&mut ctx, json!({ "clip_id": clip_id }))
             .expect("captions");
 
         let ids = output.data["ids"].as_array().expect("ids");
@@ -1160,7 +1156,7 @@ mod tests {
             project: Some(path),
         };
         let output = tool
-            .call(&mut ctx, json!({ "query": "hello", "clipId": clip_id }))
+            .call(&mut ctx, json!({ "query": "hello", "clip_id": clip_id }))
             .expect("search");
         let matches = output.data["matches"].as_array().expect("matches");
         assert_eq!(matches.len(), 1);

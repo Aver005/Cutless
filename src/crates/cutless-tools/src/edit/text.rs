@@ -63,7 +63,7 @@ pub(crate) fn register(registry: &mut Registry) {
 
 /// Частичный стиль титра: меняются только заданные поля.
 #[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(default)]
 struct StylePatch {
     font_family: Option<String>,
     font_size: Option<f64>,
@@ -89,7 +89,6 @@ struct StylePatch {
 
 /// Вход `text_add`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct AddInput {
     text: String,
     start: f64,
@@ -101,7 +100,6 @@ struct AddInput {
 
 /// Вход `text_update`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct UpdateInput {
     clip_id: String,
     #[serde(default)]
@@ -112,7 +110,6 @@ struct UpdateInput {
 
 /// Вход `text_style_track`.
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TrackInput {
     clip_id: String,
 }
