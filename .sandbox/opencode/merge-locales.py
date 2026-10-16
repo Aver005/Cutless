@@ -28,7 +28,10 @@ def main() -> None:
         for key in added:
             data[key] = merged[key][code]
         ordered = {key: data[key] for key in sorted(data)}
-        path.write_text(json.dumps(ordered, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        # newline="\n": на Windows текстовый режим иначе пишет CRLF.
+        path.write_text(
+            json.dumps(ordered, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
         print(f"{code}: +{len(added)}" + (f", нет перевода: {', '.join(missing)}" if missing else ""))
 
 

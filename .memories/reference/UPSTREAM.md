@@ -105,3 +105,4 @@ cd src && cargo fmt --check && cargo clippy --all-targets -- -D warnings && carg
 | `animate = true` у glow, bloom-pulse, chromatic-aberration, motion-blur, gaussian-blur, vignette, fisheye, pixelate, film-grain; у glow `min = 0` (проба минимума — тождество) | Рендер и так играет ключи любого параметра, флаг лишь прятал ромбики; glow 0 нужен ударам. Правки в их манифестах — будущий конфликт при синке |
 | `params` в `Command::AddLayerClip` | Слой с настроенными ручками одной командой, без второго шага undo |
 | `Command::SetKeySpan` (ключи отрезком без склейки по `KEY_EPSILON`) | Ключ на каждый кадр длинного клипа сейчас схлопывается: допуск 0,002 доли клипа — 3,6 кадра на 60 с |
+| `SetClipSpeedCurve` сдвигает следующие клипы, как `SetClipSpeed` (`push_lane_after`) | Сейчас кривая, замедляющая клип, накрывает следующий клип дорожки |
