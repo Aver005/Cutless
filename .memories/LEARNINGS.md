@@ -125,6 +125,8 @@
   Свои статусы и стрелки в прозе дают предупреждения.
 - **Сообщение коммита из файла (`git commit -F`) — с пустой строкой после заголовка.** Без неё git склеивает
   заголовок с телом (2026-10-17, четыре коммита сетки долей, исправлено `filter-branch --msg-filter 'sed 1G'`).
+- **Запуск `concat.exe` / `concat-cli.exe` без `vendor/env.sh`** — рядом с exe нужны DLL FFmpeg (`vendor/ffmpeg/…/bin`)
+  и sherpa (`vendor/sherpa/dlls`); onnxruntime сборка кладёт сама. `cargo clean` их стирает.
 - **Хук гоняет `cargo fmt --check` и clippy по рабочему дереву**, не по индексу: правка после `cargo fmt`
   (например, по совету clippy) роняет коммит — `cargo fmt` перед каждым коммитом.
 
