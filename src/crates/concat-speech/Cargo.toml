@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Speech in and out: on-device transcription with whisper.cpp, and text to speech with Kokoro."
+description = "Speech in and out: on-device transcription with transcribe.cpp, and text to speech with Kokoro."
 
 [dependencies]
 concat-host.workspace = true
@@ -34,9 +34,10 @@ tokenizers = { version = "0.23", optional = true, default-features = false, feat
 # terminal both get it; see concat-host's logs.rs.
 log = { version = "0.4", features = ["std"] }
 
-# Transcription: whisper.cpp in-process. Built from source by cmake at build
-# time; on macOS with Metal so the encoder runs on the GPU.
-whisper-rs = "0.16"
+# Transcription: transcribe.cpp in-process (GGUF Whisper/Parakeet/Nemotron/
+# GigaAM, and the older whisper.cpp `.bin` files). Built from source by cmake
+# at build time; on macOS with Metal so the encoder runs on the GPU.
+transcribe-cpp = { version = "0.4", default-features = false }
 
 # Text to speech: the official k2-fsa bindings. Linked statically on the
 # desktop Unixes, so the binary carries no extra dylibs.
@@ -67,7 +68,7 @@ sherpa-onnx = "1.13"
 sherpa-onnx = { version = "1.13", default-features = false, features = ["shared"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-whisper-rs = { version = "0.16", features = ["metal"] }
+transcribe-cpp = { version = "0.4", features = ["metal"] }
 # The CoreML provider, so Chatterbox can run on the Mac's own GPU and Neural
 # Engine when Settings › Speech asks for it. Pulls pyke's CoreML build of the
 # runtime in place of the plain one.
