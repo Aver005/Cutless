@@ -34,6 +34,7 @@ import {
     CurveData,
     CurveEditor,
     CurveGroupData,
+    ShipPanel,
     WheelData,
     WheelGroupData,
 } from "grading.slint";
@@ -1812,8 +1813,10 @@ export component AdjustPanel inherits VerticalLayout {
     callback curve-remove(key: string, point: int);
     callback commit();
 
+    // Cutless: a saved grade, "My ship", one click away above the tools.
+    ShipPanel { }
+
     Section {
-        first: true;
         SectionHeader {
             title: I18n.t("common.adjust");
             HelpButton {

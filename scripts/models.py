@@ -44,7 +44,7 @@ TABLES = {
     "cutout": CRATES / "concat-vision" / "src" / "models.rs",
     "tts": CRATES / "concat-speech" / "src" / "tts.rs",
     "chatterbox": CRATES / "concat-speech" / "src" / "chatterbox.rs",
-    "whisper": CRATES / "concat-speech" / "src" / "transcribe.rs",
+    "whisper": CRATES / "concat-speech" / "src" / "catalog.rs",
 }
 
 # The bundles a release publishes, as build-app.yml and mobile.yml name
@@ -203,6 +203,11 @@ def check() -> int:
         ids |= {consts[name] for name in re.findall(r'^\s*(?:pub )?id: (\w+),', text, re.M) if name in consts}
         if family == "cutout":
             ids = set(re.findall(r'^\s*file: "([^"]+)"', text, re.M))
+        # Cutless: a catalog row marked `mirrored: false` downloads straight
+        # from its upstream (the GGUF speech models), so the mirror never holds it.
+        for block in re.findall(r"CatalogModel \{(.*?)\n\s*\},", text, re.S):
+            if re.search(r"^\s*mirrored: false,", block, re.M):
+                ids -= set(re.findall(r'^\s*id: "([^"]+)"', block, re.M))
         wanted = {engine_id(model) for model in rows}
         for missing in sorted(wanted - ids):
             bad(f"{path.relative_to(ROOT)} has no model {missing!r}")
