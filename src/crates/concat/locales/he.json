@@ -781,6 +781,8 @@
   "settings.accent": "צבע הדגשה",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "כתובת",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "גרסת הבנייה הזו, {0}, חדשה מכל גרסה שפורסמה.",
   "settings.amber": "ענבר",
   "settings.appearance": "מראה",

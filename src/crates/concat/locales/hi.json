@@ -781,6 +781,8 @@
   "settings.accent": "एक्सेंट रंग",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "पता",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "यह बिल्ड, {0}, किसी भी रिलीज़ से नया है।",
   "settings.amber": "एम्बर",
   "settings.appearance": "रूप-रंग",

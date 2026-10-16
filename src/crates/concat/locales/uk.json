@@ -781,6 +781,8 @@
   "settings.accent": "Акцент",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "Адреса",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "Ця збірка, {0}, новіша за будь-який випуск.",
   "settings.amber": "Бурштин",
   "settings.appearance": "Вигляд",

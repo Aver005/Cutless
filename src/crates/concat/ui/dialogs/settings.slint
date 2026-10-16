@@ -70,6 +70,8 @@ export struct SettingsData {
     download-base: string,
     /// the Concat API served on a socket while the window is open
     server-enabled: bool,
+    /// whether an agent may edit the project on screen through the API
+    agents-enabled: bool,
     /// the two halves of "127.0.0.1:7420"
     server-host: string,
     server-port: int,
@@ -460,6 +462,7 @@ export component SettingsDialog inherits Modal {
     callback download-source-changed(index: int);
     callback download-base-edited(text: string);
     callback server-enabled-changed(on: bool);
+    callback agents-changed(on: bool);
     callback server-host-edited(text: string);
     callback server-port-edited(port: int);
     callback server-token-edited(text: string);
@@ -1039,8 +1042,20 @@ export component SettingsDialog inherits Modal {
             // is putting a script on another machine, and the hints say
             // what that opens.
             if root.data.tab == 4 && !root.phone: VerticalLayout {
+                // The agents' switch sits above the server's: it is the one
+                // most people reach for, and turning it on brings the server
+                // up with it on this machine, behind a token.
                 DialogSection {
                     first: true;
+                    title: I18n.t("settings.agentsEdit");
+                    hint: I18n.t("settings.agentsEditHint");
+                    switchable: true;
+                    on: root.data.agents-enabled;
+                    open: false;
+                    switched(on) => { root.agents-changed(on); }
+                }
+
+                DialogSection {
                     title: I18n.t("settings.remoteControl");
                     hint: I18n.t("settings.servesConcatApiWhile");
                     switchable: true;

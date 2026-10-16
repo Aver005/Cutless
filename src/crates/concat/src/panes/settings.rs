@@ -50,6 +50,9 @@ pub enum SettingsMsg {
     DownloadSourceChanged(i32),
     DownloadBaseEdited(String),
     ServerEnabledChanged(bool),
+    /// The agents' switch: whether an agent may edit the project on screen
+    /// through the API.
+    AgentsChanged(bool),
     /// The address half of where the server listens; the port is its own
     /// field, so a person types "127.0.0.1" and "7420" and never a colon.
     ServerHostEdited(String),
@@ -346,8 +349,25 @@ impl SettingsPane {
             }
             SettingsMsg::ServerEnabledChanged(on) => {
                 studio.prefs.server.enabled = on;
+                // Turning the API off takes the agents with it: they reach
+                // the project through it, so there is nothing left to allow.
+                if !on {
+                    studio.prefs.server.agents = false;
+                }
                 studio.prefs.save(&studio.host.dirs);
                 self.apply_server(studio);
+            }
+            SettingsMsg::AgentsChanged(on) => {
+                if on {
+                    enable_agents(&mut studio.prefs.server);
+                } else {
+                    // Off is just the flag: the server is left as it is.
+                    studio.prefs.server.agents = false;
+                }
+                studio.prefs.save(&studio.host.dirs);
+                if on {
+                    self.apply_server(studio);
+                }
             }
             SettingsMsg::ServerHostEdited(text) => {
                 let (_, port) = split_listen(&studio.prefs.server.listen);
@@ -888,6 +908,7 @@ impl SettingsPane {
             download_source: self.download_source as i32,
             download_base: self.download_base.as_str().into(),
             server_enabled: studio.prefs.server.enabled,
+            agents_enabled: studio.prefs.server.agents,
             server_host: split_listen(&studio.prefs.server.listen).0.into(),
             server_port: i32::from(split_listen(&studio.prefs.server.listen).1),
             server_token: match &studio.host.server {
@@ -990,6 +1011,33 @@ pub fn new_token() -> String {
     format!("{:016x}{:016x}", word(1), word(2))
 }
 
+/// Turns the agents' switch on, and the server with it: an agent edits the
+/// project through the API, so it has to be served, and served on this
+/// machine only. A blank token is given one, and an address open to the
+/// network is pulled back to loopback.
+fn enable_agents(server: &mut prefs::ServerPrefs) {
+    server.agents = true;
+    server.enabled = true;
+    if server.token.trim().is_empty() {
+        server.token = new_token();
+    }
+    if !is_loopback(&server.listen) {
+        server.listen = prefs::DEFAULT_LISTEN.to_owned();
+    }
+}
+
+/// Whether the listen address is on this machine only: an empty host, a
+/// loopback IP or "localhost". This is what lets the agents' switch keep a
+/// chosen local port and only pull a network-facing address back.
+fn is_loopback(listen: &str) -> bool {
+    let (host, _) = split_listen(listen);
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1042,6 +1090,54 @@ mod tests {
         let list = [model("a", true), model("b", false), model("c", true)];
         let ids: Vec<&str> = installed(&list).iter().map(|m| m.id.as_str()).collect();
         assert_eq!(ids, ["a", "c"]);
+    }
+
+    /// Turning the agents on turns the server on too, on loopback, behind a
+    /// token: an agent at the open project needs all three.
+    #[test]
+    fn enabling_agents_turns_on_the_server_on_loopback() {
+        let mut server = prefs::ServerPrefs {
+            enabled: false,
+            agents: false,
+            listen: "0.0.0.0:9000".to_owned(),
+            token: String::new(),
+        };
+        enable_agents(&mut server);
+        assert!(server.agents);
+        assert!(server.enabled);
+        assert!(!server.token.is_empty());
+        assert_eq!(
+            server.listen,
+            prefs::DEFAULT_LISTEN,
+            "a network address comes back"
+        );
+    }
+
+    /// A token already chosen and a port already on this machine are left
+    /// alone: only what would expose the project is corrected.
+    #[test]
+    fn enabling_agents_keeps_a_token_and_a_local_address() {
+        let mut server = prefs::ServerPrefs {
+            enabled: true,
+            agents: false,
+            listen: "127.0.0.1:9123".to_owned(),
+            token: "chosen".to_owned(),
+        };
+        enable_agents(&mut server);
+        assert_eq!(server.token, "chosen");
+        assert_eq!(server.listen, "127.0.0.1:9123");
+    }
+
+    /// Loopback is the machine itself in every spelling the address field
+    /// accepts; anything else would let the network in.
+    #[test]
+    fn loopback_is_recognised_by_host() {
+        for listen in ["127.0.0.1:7420", "[::1]:7420", "localhost:1", ""] {
+            assert!(is_loopback(listen), "{listen:?} is this machine");
+        }
+        for listen in ["0.0.0.0:7420", "192.168.1.9:7420", "[2001:db8::1]:1"] {
+            assert!(!is_loopback(listen), "{listen:?} is not");
+        }
     }
 }
 

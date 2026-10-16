@@ -781,6 +781,8 @@
   "settings.accent": "สีเน้น",
   "settings.addModelFile": "Add a model file…",
   "settings.address": "ที่อยู่",
+  "settings.agentsEdit": "Agents can edit the open project",
+  "settings.agentsEditHint": "An agent through MCP edits the project on screen; Ctrl+Z undoes its run of edits.",
   "settings.aheadOfReleases": "บิลด์นี้ ({0}) ใหม่กว่าทุกรุ่นที่เผยแพร่",
   "settings.amber": "อำพัน",
   "settings.appearance": "ลักษณะที่ปรากฏ",

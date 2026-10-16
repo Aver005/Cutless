@@ -165,6 +165,8 @@ impl Preferences {
 pub struct ServerPrefs {
     /// Serve while the window is open.
     pub enabled: bool,
+    /// Let agents through the API edit the project on screen.
+    pub agents: bool,
     /// The TCP address JSON-RPC lines are served on.
     pub listen: String,
     /// What a connection presents first. Empty means none, which the
@@ -176,6 +178,7 @@ impl Default for ServerPrefs {
     fn default() -> Self {
         ServerPrefs {
             enabled: false,
+            agents: false,
             listen: DEFAULT_LISTEN.to_owned(),
             token: String::new(),
         }
@@ -386,5 +389,15 @@ mod tests {
         let older: Preferences = serde_json::from_str(r#"{"dark": true}"#).unwrap();
         assert!(!older.onboarding_done);
         assert_eq!(older.goal, None);
+    }
+
+    /// A file from before the agents' switch existed reads as off, so
+    /// nothing an agent does is allowed until it is turned on by hand.
+    #[test]
+    fn an_older_file_has_agents_off() {
+        assert!(!ServerPrefs::default().agents);
+        let older: Preferences = serde_json::from_str(r#"{"server": {"enabled": true}}"#).unwrap();
+        assert!(older.server.enabled);
+        assert!(!older.server.agents);
     }
 }
