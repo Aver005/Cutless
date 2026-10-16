@@ -17,6 +17,7 @@
 //! (sherpa-onnx's static libraries) stays out of everything that does not
 //! speak.
 
+pub mod catalog;
 #[cfg(feature = "chatterbox")]
 pub mod chatterbox;
 pub mod transcribe;
@@ -100,10 +101,57 @@ pub(crate) fn fetch_model(
     cancel: &std::sync::atomic::AtomicBool,
     progress: &mut dyn FnMut(DownloadProgress),
 ) -> Result<(u64, u64), String> {
+    fetch_from(
+        concat_host::models::sources(file, upstream),
+        partial,
+        id,
+        estimate,
+        sha256,
+        cancel,
+        progress,
+    )
+}
+
+/// [`fetch_model`] for a model with no Concat mirror: the sources are the
+/// upstream and the Hugging Face mirror only, never our own release.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fetch_model_upstream(
+    file: &str,
+    upstream: &str,
+    partial: &std::path::Path,
+    id: &str,
+    estimate: u64,
+    sha256: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+    progress: &mut dyn FnMut(DownloadProgress),
+) -> Result<(u64, u64), String> {
+    fetch_from(
+        concat_host::models::sources_upstream(file, upstream),
+        partial,
+        id,
+        estimate,
+        sha256,
+        cancel,
+        progress,
+    )
+}
+
+/// Tries `sources` in order, checking the finished file against `sha256`
+/// after the first that answers.
+#[allow(clippy::too_many_arguments)]
+fn fetch_from(
+    sources: Vec<String>,
+    partial: &std::path::Path,
+    id: &str,
+    estimate: u64,
+    sha256: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+    progress: &mut dyn FnMut(DownloadProgress),
+) -> Result<(u64, u64), String> {
     use std::sync::atomic::Ordering;
 
     let mut last = String::new();
-    for url in concat_host::models::sources(file, upstream) {
+    for url in sources {
         match download_to(&url, partial, id, estimate, cancel, progress) {
             Ok(totals) => {
                 concat_host::models::verify(partial, sha256).inspect_err(|_| {

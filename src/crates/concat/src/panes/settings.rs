@@ -59,6 +59,10 @@ pub enum SettingsMsg {
     ModelDownload(String),
     ModelCancel(String),
     ModelRemove(String),
+    /// Pick a model file of the user's own for transcription.
+    BrowseModel,
+    /// The file the picker answered with, as an absolute path.
+    CustomModelChosen(String),
     /// A download's worker reporting where it is.
     ModelProgress {
         id: String,
@@ -110,6 +114,13 @@ pub struct ModelState {
     /// Megabytes fetched so far while a download runs.
     pub fetched: Option<f32>,
     pub unpacking: bool,
+    /// Where the model came from: 0 a catalogue model Concat downloads, 1 one
+    /// found on disk, 2 one the user picked. Foreign models are not Concat's
+    /// to download or delete, which the row draws differently.
+    pub origin: i32,
+    /// The model's family, e.g. "whisper" or "parakeet"; picking a default
+    /// prefers the Russian-capable families.
+    pub family: String,
 }
 
 impl ModelState {
@@ -141,8 +152,45 @@ impl ModelState {
                 .into()
             },
             eta: SharedString::new(),
+            origin: self.origin,
         }
     }
+}
+
+/// The accuracy pips a model earns: a rough read of how good a bet it is,
+/// from the family and, for whisper, the size.
+fn accuracy_of(family: &str, id: &str) -> i32 {
+    match family {
+        "parakeet" | "nemotron" | "gigaam" => 5,
+        "whisper" if id.starts_with("tiny") => 2,
+        "whisper" if id.starts_with("base") => 3,
+        "whisper" if id.starts_with("small") => 4,
+        _ => 4,
+    }
+}
+
+/// A model file the user picked, as a settings row: sized off the file and
+/// classified by its name. `None` for a path with no file name to show.
+fn custom_model(path: &str, active: Option<&str>) -> Option<ModelState> {
+    let file = std::path::Path::new(path);
+    let file_name = file.file_name().and_then(|name| name.to_str())?;
+    let family = concat_speech::catalog::family_of_file(file_name)
+        .map(|family| family.name().to_owned())
+        .unwrap_or_else(|| "whisper".to_owned());
+    let bytes = std::fs::metadata(file).map(|meta| meta.len()).unwrap_or(0);
+    Some(ModelState {
+        id: path.to_owned(),
+        name: concat_speech::catalog::display_name(file),
+        note: t("settings.chosenModelFile"),
+        megabytes: bytes as f32 / 1_000_000.0,
+        accuracy: accuracy_of(&family, file_name),
+        installed: file.is_file(),
+        active: active == Some(path),
+        fetched: None,
+        unpacking: false,
+        origin: 2,
+        family,
+    })
 }
 
 /// The models of a kind that are on disk, in the settings' order: the
@@ -334,14 +382,60 @@ impl SettingsPane {
                 }
             }
             SettingsMsg::ModelRemove(id) => {
-                let result = if self.is_transcriber(&id) {
-                    studio.host.transcriber.delete_model(&studio.host.dirs, &id)
+                // A hand-picked model is forgotten rather than deleted: the
+                // file is the user's, not one Concat downloaded.
+                if studio.prefs.transcriber_custom_model.as_deref() == Some(id.as_str()) {
+                    studio.prefs.transcriber_custom_model = None;
+                    if studio.prefs.transcriber_model.as_deref() == Some(id.as_str()) {
+                        studio.prefs.transcriber_model = None;
+                    }
+                    studio.prefs.save(&studio.host.dirs);
                 } else {
-                    studio.host.speech.delete_model(&studio.host.dirs, &id)
-                };
-                if let Err(error) = result {
-                    studio.notify(&error, true);
+                    let result = if self.is_transcriber(&id) {
+                        studio.host.transcriber.delete_model(&studio.host.dirs, &id)
+                    } else {
+                        studio.host.speech.delete_model(&studio.host.dirs, &id)
+                    };
+                    if let Err(error) = result {
+                        studio.notify(&error, true);
+                    }
                 }
+                self.refresh(studio);
+            }
+            SettingsMsg::BrowseModel => {
+                let title = t("settings.addModelFile");
+                // Asked with the studio unborrowed and answered as a message of
+                // its own; see `host::after_dialog`.
+                crate::host::after_dialog(
+                    move || {
+                        crate::platform::pick_files(
+                            &title,
+                            Some((&t("settings.models"), &["gguf", "bin"])),
+                        )
+                    },
+                    |studio, _, _, paths| {
+                        if let Some(path) = paths.into_iter().next() {
+                            studio.handle(Msg::Settings(SettingsMsg::CustomModelChosen(
+                                path.to_string_lossy().into_owned(),
+                            )));
+                        }
+                    },
+                );
+            }
+            SettingsMsg::CustomModelChosen(path) => {
+                let name = std::path::Path::new(&path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default();
+                if !concat_speech::catalog::is_model_file(name) {
+                    studio.notify(&t("settings.notAModelFile"), true);
+                    return;
+                }
+                studio.prefs.transcriber_custom_model = Some(path.clone());
+                if studio.prefs.transcriber_model.is_none() {
+                    studio.prefs.transcriber_model = Some(path);
+                }
+                studio.prefs.save(&studio.host.dirs);
                 self.refresh(studio);
             }
             SettingsMsg::ModelProgress {
@@ -628,31 +722,39 @@ impl SettingsPane {
         let chosen_transcriber = studio.prefs.transcriber_model.clone();
         let chosen_voice = studio.prefs.tts_model.clone();
         if let Ok(status) = concat_speech::Transcriber::status(dirs) {
+            let state = |model: &concat_speech::transcribe::ModelStatus, origin: i32| {
+                let (fetched, unpacking) =
+                    downloading.get(&model.id).copied().unwrap_or((None, false));
+                ModelState {
+                    id: model.id.clone(),
+                    name: model.label.clone(),
+                    note: model.blurb.clone(),
+                    megabytes: model.size_bytes as f32 / 1_000_000.0,
+                    accuracy: accuracy_of(&model.family, &model.id),
+                    installed: model.downloaded,
+                    active: chosen_transcriber.as_deref() == Some(model.id.as_str()),
+                    fetched,
+                    unpacking,
+                    origin,
+                    family: model.family.clone(),
+                }
+            };
             self.transcribers = status
                 .models
                 .iter()
-                .map(|model| {
-                    let (fetched, unpacking) =
-                        downloading.get(&model.id).copied().unwrap_or((None, false));
-                    ModelState {
-                        id: model.id.clone(),
-                        name: model.label.clone(),
-                        note: model.blurb.clone(),
-                        megabytes: model.size_bytes as f32 / 1_000_000.0,
-                        accuracy: if model.id.starts_with("tiny") {
-                            2
-                        } else if model.id.starts_with("base") {
-                            3
-                        } else {
-                            4
-                        },
-                        installed: model.downloaded,
-                        active: chosen_transcriber.as_deref() == Some(model.id.as_str()),
-                        fetched,
-                        unpacking,
-                    }
-                })
+                .map(|model| state(model, 0))
+                .chain(status.found.iter().map(|model| state(model, 1)))
                 .collect();
+        }
+        // A model the user picked for themselves rides along as a row of its
+        // own, installed but not Concat's to download or delete.
+        if let Some(model) = studio
+            .prefs
+            .transcriber_custom_model
+            .clone()
+            .and_then(|path| custom_model(&path, chosen_transcriber.as_deref()))
+        {
+            self.transcribers.push(model);
         }
         if let Ok(status) = concat_speech::Speech::status(dirs) {
             studio.speech.speakers = status.voices.clone();
@@ -672,18 +774,36 @@ impl SettingsPane {
                         active: chosen_voice.as_deref() == Some(model.id.as_str()),
                         fetched,
                         unpacking,
+                        origin: 0,
+                        family: "tts".to_owned(),
                     }
                 })
                 .collect();
         }
-        // An engine with nothing chosen falls back to whatever is installed,
-        // rather than silently having no model at all.
-        for list in [&mut self.transcribers, &mut self.voices] {
-            if !list.iter().any(|model| model.active && model.installed)
-                && let Some(first) = list.iter_mut().find(|model| model.installed)
-            {
-                first.active = true;
+        // An engine with nothing chosen falls back to a model that is here.
+        // For captions a Russian-capable family (Parakeet, Nemotron, GigaAM)
+        // is preferred over whatever whisper happens to be installed.
+        if !self
+            .transcribers
+            .iter()
+            .any(|model| model.active && model.installed)
+        {
+            let preferred = self.transcribers.iter().position(|model| {
+                model.installed
+                    && matches!(model.family.as_str(), "parakeet" | "nemotron" | "gigaam")
+            });
+            let fallback = self.transcribers.iter().position(|model| model.installed);
+            if let Some(index) = preferred.or(fallback) {
+                self.transcribers[index].active = true;
             }
+        }
+        if !self
+            .voices
+            .iter()
+            .any(|model| model.active && model.installed)
+            && let Some(first) = self.voices.iter_mut().find(|model| model.installed)
+        {
+            first.active = true;
         }
     }
 
@@ -888,6 +1008,8 @@ mod tests {
             active: true,
             fetched: Some(50.0),
             unpacking: false,
+            origin: 0,
+            family: "whisper".into(),
         };
         let row = model.row();
         assert!(row.downloading);
@@ -907,6 +1029,8 @@ mod tests {
             active: false,
             fetched: None,
             unpacking: false,
+            origin: 0,
+            family: "whisper".into(),
         };
         let list = [model("a", true), model("b", false), model("c", true)];
         let ids: Vec<&str> = installed(&list).iter().map(|m| m.id.as_str()).collect();

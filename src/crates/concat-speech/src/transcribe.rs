@@ -11,9 +11,10 @@
 //!
 //! Two pieces:
 //!
-//! 1. **Models.** Downloaded on demand from Hugging Face into the app data
-//!    folder as plain `.bin` files, streamed with progress, written to a
-//!    `.part` and renamed - a torn download must never look usable. A loaded
+//! 1. **Models.** A catalogue of whisper.cpp, Parakeet and Nemotron models
+//!    ([`crate::catalog`]), downloaded on demand into the app data folder and
+//!    streamed with progress. Models already on disk - in the Hugging Face
+//!    cache, or a file the user picked - are used where they lie. A loaded
 //!    model is cached until another is asked for, because loading one takes
 //!    seconds.
 //! 2. **Transcription.** The engine's audio decoder hands over the clip's
@@ -21,7 +22,7 @@
 //!    the window, each carrying the words the model timed inside it.
 
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Once};
 
@@ -30,97 +31,10 @@ use concat_media::{AudioDecoder, AudioOptions, SampleFormat};
 use serde::{Deserialize, Serialize};
 use transcribe_cpp::{CancelToken, Model, RunOptions};
 
+use crate::catalog;
 use crate::{DownloadProgress, JobStage};
 
-/// One downloadable Whisper model. Sizes are approximate, for progress bars
-/// when the server declines to send a Content-Length.
-struct KnownModel {
-    id: &'static str,
-    label: &'static str,
-    /// One line for the settings row: what this size trades away.
-    blurb: &'static str,
-    approx_bytes: u64,
-    /// What the finished file must hash to; a download with nothing to
-    /// check against is refused. See [`concat_host::models`].
-    sha256: &'static str,
-    english_only: bool,
-}
-
-/// The models the settings panel offers, fastest first.
-///
-/// All from the official `ggerganov/whisper.cpp` conversions. Nothing bigger
-/// than `small`: `medium` is 1.5 GB and minutes-per-minute on CPU, which is
-/// the opposite of what this feature is for.
-const KNOWN_MODELS: &[KnownModel] = &[
-    KnownModel {
-        id: "tiny.en",
-        label: "Tiny (English)",
-        blurb: "Fastest draft. Rough on names and punctuation.",
-        approx_bytes: 77_704_715,
-        sha256: "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
-        english_only: true,
-    },
-    KnownModel {
-        id: "tiny",
-        label: "Tiny (Multilingual)",
-        blurb: "Fastest draft, any language.",
-        approx_bytes: 77_691_713,
-        sha256: "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
-        english_only: false,
-    },
-    KnownModel {
-        id: "base.en",
-        label: "Base (English)",
-        blurb: "The sweet spot: solid captions at ~10x realtime.",
-        approx_bytes: 147_964_211,
-        sha256: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
-        english_only: true,
-    },
-    KnownModel {
-        id: "base",
-        label: "Base (Multilingual)",
-        blurb: "Solid captions, any language.",
-        approx_bytes: 147_951_465,
-        sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
-        english_only: false,
-    },
-    KnownModel {
-        id: "small.en",
-        label: "Small (English)",
-        blurb: "Noticeably better wording; a few times slower.",
-        approx_bytes: 487_614_201,
-        sha256: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
-        english_only: true,
-    },
-    KnownModel {
-        id: "small",
-        label: "Small (Multilingual)",
-        blurb: "Best quality offered, any language.",
-        approx_bytes: 487_601_967,
-        sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
-        english_only: false,
-    },
-];
-
-fn known(id: &str) -> Option<&'static KnownModel> {
-    KNOWN_MODELS.iter().find(|model| model.id == id)
-}
-
-/// The file a model arrives as, and what it is called on the mirror.
-fn model_archive(id: &str) -> String {
-    format!("ggml-{id}.bin")
-}
-
-/// The whisper.cpp commit the table's digests were taken at: what the
-/// fallback fetches is pinned to it, so `main` moving on changes nothing.
-const UPSTREAM_COMMIT: &str = "5359861c739e955e79d9a303bcbc70fb988958b1";
-
-/// Where the mirror was filled from, and the second place a download tries.
-fn model_upstream(id: &str) -> String {
-    format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/{UPSTREAM_COMMIT}/ggml-{id}.bin")
-}
-
-/// Where downloaded models live: `<app data>/whisper-models/ggml-<id>.bin`.
+/// Where downloaded models live: `<app data>/whisper-models/<file>`.
 fn models_dir(dirs: &AppDirs) -> Result<PathBuf, String> {
     let dir = dirs.data.join("whisper-models");
     std::fs::create_dir_all(&dir)
@@ -130,16 +44,21 @@ fn models_dir(dirs: &AppDirs) -> Result<PathBuf, String> {
 
 fn model_file(dirs: &AppDirs, id: &str) -> Result<PathBuf, String> {
     // Ids come from our own table; anything else is a bug, not input.
-    known(id).ok_or_else(|| format!("unknown model {id:?}"))?;
-    Ok(models_dir(dirs)?.join(format!("ggml-{id}.bin")))
+    let model = catalog::known(id).ok_or_else(|| format!("unknown model {id:?}"))?;
+    Ok(models_dir(dirs)?.join(model.file))
 }
 
-/// The file a run reads: a model placed by the table, or one named outright
-/// by `CONCAT_TRANSCRIBE_MODEL` - the hook the ignored `real_audio` test
-/// uses to run a GGUF from anywhere on disk.
+/// The file a run reads: a model the catalogue placed, a file named outright
+/// by `CONCAT_TRANSCRIBE_MODEL` - the hook the ignored `real_audio` test uses
+/// to run a GGUF from anywhere on disk - or one the caller named by absolute
+/// path: a model found in the Hugging Face cache, or one they picked.
+///
+/// A catalogue id is a bare name like "base.en"; a chosen file is an absolute
+/// path, which is what tells the two apart.
 fn run_model_file(dirs: &AppDirs, id: &str) -> Result<PathBuf, String> {
     match std::env::var_os("CONCAT_TRANSCRIBE_MODEL") {
         Some(path) => Ok(PathBuf::from(path)),
+        None if Path::new(id).is_absolute() => Ok(PathBuf::from(id)),
         None => model_file(dirs, id),
     }
 }
@@ -148,7 +67,8 @@ fn run_model_file(dirs: &AppDirs, id: &str) -> Result<PathBuf, String> {
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelStatus {
-    /// The model id, e.g. "base.en".
+    /// The model id, e.g. "base.en", or a file's path for a found or chosen
+    /// model.
     pub id: String,
     /// Display name.
     pub label: String,
@@ -160,6 +80,10 @@ pub struct ModelStatus {
     pub size_bytes: u64,
     /// Whether the file is on disk.
     pub downloaded: bool,
+    /// Whether this is a model found on disk rather than one Concat offers.
+    pub found: bool,
+    /// The family the model belongs to, e.g. "whisper" or "parakeet".
+    pub family: String,
 }
 
 /// What the settings panel shows.
@@ -168,8 +92,10 @@ pub struct ModelStatus {
 pub struct TranscriberStatus {
     /// Where models are stored, so the settings panel can say so.
     pub models_dir: String,
-    /// Every model the panel offers.
+    /// Every model the panel offers for download.
     pub models: Vec<ModelStatus>,
+    /// Models already on disk in the Hugging Face cache.
+    pub found: Vec<ModelStatus>,
 }
 
 /// One timed word inside a caption, relative to the window's start.
@@ -251,27 +177,48 @@ impl Transcriber {
         }
     }
 
-    /// Per-model state, for the settings panel.
+    /// Per-model state, for the settings panel: what the catalogue offers,
+    /// and what is already on disk in the Hugging Face cache.
     pub fn status(dirs: &AppDirs) -> Result<TranscriberStatus, String> {
         let dir = models_dir(dirs)?;
+        let models = catalog::CATALOG
+            .iter()
+            .map(|model| ModelStatus {
+                id: model.id.to_owned(),
+                label: model.label.to_owned(),
+                blurb: model.blurb.to_owned(),
+                english_only: model.english_only,
+                size_bytes: model.approx_bytes,
+                downloaded: dir.join(model.file).is_file(),
+                found: false,
+                family: model.family.name().to_owned(),
+            })
+            .collect();
+        let found = catalog::hf_cache_dir()
+            .map(|root| catalog::scan_cache(&root))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|model| ModelStatus {
+                id: model.path.to_string_lossy().into_owned(),
+                label: catalog::display_name(&model.path),
+                blurb: "Already on this computer (Hugging Face cache).".to_owned(),
+                english_only: false,
+                size_bytes: model.bytes,
+                downloaded: true,
+                found: true,
+                family: model.family.name().to_owned(),
+            })
+            .collect();
         Ok(TranscriberStatus {
             models_dir: dir.to_string_lossy().into_owned(),
-            models: KNOWN_MODELS
-                .iter()
-                .map(|model| ModelStatus {
-                    id: model.id.to_owned(),
-                    label: model.label.to_owned(),
-                    blurb: model.blurb.to_owned(),
-                    english_only: model.english_only,
-                    size_bytes: model.approx_bytes,
-                    downloaded: dir.join(format!("ggml-{}.bin", model.id)).is_file(),
-                })
-                .collect(),
+            models,
+            found,
         })
     }
 
-    /// Streams one model from Concat's mirror into the models folder. Blocks
-    /// for the whole download: run it on its own thread.
+    /// Streams one catalogue model into the models folder - from Concat's
+    /// mirror when it has one, straight from upstream when it does not.
+    /// Blocks for the whole download: run it on its own thread.
     ///
     /// Written to `<file>.part` and renamed at the end: a download killed
     /// halfway must never be mistaken for a model, because the engine would
@@ -283,23 +230,38 @@ impl Transcriber {
         id: &str,
         mut progress: impl FnMut(DownloadProgress),
     ) -> Result<(), String> {
+        let model = catalog::known(id).ok_or_else(|| format!("unknown model {id:?}"))?;
         let job = self.downloads.begin("model download")?;
         let destination = model_file(dirs, id)?;
         if destination.is_file() {
             return Ok(());
         }
-        let estimate = known(id).map(|model| model.approx_bytes).unwrap_or(0);
         let partial = destination.with_extension("bin.part");
-        let (received, total) = crate::fetch_model(
-            &model_archive(id),
-            &model_upstream(id),
-            &partial,
-            id,
-            estimate,
-            known(id).map(|model| model.sha256).unwrap_or(""),
-            job.cancel_flag(),
-            &mut progress,
-        )?;
+        // A model whose mirror holds it tries the mirror first; one only its
+        // upstream publishes asks upstream - our release would 404.
+        let (received, total) = if model.mirrored {
+            crate::fetch_model(
+                model.file,
+                model.upstream,
+                &partial,
+                id,
+                model.approx_bytes,
+                model.sha256,
+                job.cancel_flag(),
+                &mut progress,
+            )?
+        } else {
+            crate::fetch_model_upstream(
+                model.file,
+                model.upstream,
+                &partial,
+                id,
+                model.approx_bytes,
+                model.sha256,
+                job.cancel_flag(),
+                &mut progress,
+            )?
+        };
         std::fs::rename(&partial, &destination)
             .map_err(|error| format!("could not finish {}: {error}", destination.display()))?;
         progress(DownloadProgress {
@@ -318,7 +280,15 @@ impl Transcriber {
     }
 
     /// Removes a downloaded model file, unless a transcription is using it.
+    /// Only a catalogue model Concat downloaded can be removed; a model found
+    /// in the cache or picked by hand is not ours to delete.
     pub fn delete_model(&self, dirs: &AppDirs, id: &str) -> Result<(), String> {
+        if catalog::known(id).is_none() {
+            return Err(
+                "this model is not one Concat downloaded, so it is not Concat's to remove"
+                    .to_owned(),
+            );
+        }
         let file = model_file(dirs, id)?;
         let mut loaded = self.model.try_lock().map_err(|_| {
             "a transcription is running - wait for it or cancel it first".to_owned()
@@ -328,6 +298,27 @@ impl Transcriber {
         }
         std::fs::remove_file(&file)
             .map_err(|error| format!("could not remove {}: {error}", file.display()))
+    }
+
+    /// The language codes a model knows, so the captions sheet can offer
+    /// them. Loads the model if it is not already loaded; an empty list means
+    /// the model lists no languages and lets the engine detect them.
+    pub fn languages(&self, dirs: &AppDirs, id: &str) -> Result<Vec<String>, String> {
+        let path = run_model_file(dirs, id)?;
+        if !path.is_file() {
+            return Err(format!(
+                "model {id} is not downloaded - see Settings > Transcriber"
+            ));
+        }
+        let mut loaded = self
+            .model
+            .lock()
+            .map_err(|_| "transcriber state poisoned".to_owned())?;
+        let model = ensure_loaded(&mut loaded, id, &path)?;
+        let capabilities = model
+            .capabilities()
+            .map_err(|error| format!("could not read the model's capabilities: {error}"))?;
+        Ok(capabilities.languages)
     }
 
     /// The model still loaded from the last run, which the next run on it
@@ -398,21 +389,12 @@ impl Transcriber {
             .lock()
             .map_err(|_| "transcriber state poisoned".to_owned())?;
         if loaded.as_ref().map(|model| model.id.as_str()) != Some(request.model_id.as_str()) {
-            // Load before overwriting: a failed load keeps the old model.
+            // The bar says a model is being read before the seconds-long wait.
             progress(JobStage::Loading);
-            let model = Model::load(&model_path)
-                .map_err(|error| format!("could not load the model: {error}"))?;
-            *loaded = Some(LoadedModel {
-                id: request.model_id.clone(),
-                model,
-            });
         }
         // Clone the handle out instead of borrowing the guard, so there is no
         // `expect`; the guard itself stays held to keep deletes out.
-        let model = loaded
-            .as_ref()
-            .map(|loaded| loaded.model.clone())
-            .ok_or_else(|| "the transcriber has no model".to_owned())?;
+        let model = ensure_loaded(&mut loaded, &request.model_id, &model_path)?;
 
         let capabilities = model
             .capabilities()
@@ -502,10 +484,28 @@ fn install_logging() {
     ONCE.call_once(transcribe_cpp::init_logging);
 }
 
+/// The model `id`, loaded into the cache if it is not already there. A failed
+/// load leaves the previous model in place, since the caller may still need it.
+fn ensure_loaded(loaded: &mut Option<LoadedModel>, id: &str, path: &Path) -> Result<Model, String> {
+    if loaded.as_ref().map(|model| model.id.as_str()) != Some(id) {
+        install_logging();
+        let model =
+            Model::load(path).map_err(|error| format!("could not load the model: {error}"))?;
+        *loaded = Some(LoadedModel {
+            id: id.to_owned(),
+            model,
+        });
+    }
+    loaded
+        .as_ref()
+        .map(|loaded| loaded.model.clone())
+        .ok_or_else(|| "the transcriber has no model".to_owned())
+}
+
 /// Whether every language the model offers is English. The `.en` whisper
 /// builds say so in the table even when the model itself lists nothing.
 fn is_english_only(id: &str, languages: &[String]) -> bool {
-    known(id).is_some_and(|model| model.english_only)
+    catalog::known(id).is_some_and(|model| model.english_only)
         || (!languages.is_empty() && languages.iter().all(|code| code.starts_with("en")))
 }
 
@@ -786,28 +786,33 @@ mod tests {
     }
 
     #[test]
-    fn every_known_model_is_asked_of_the_mirror_before_upstream() {
-        for model in KNOWN_MODELS {
-            let file = model_archive(model.id);
-            assert_eq!(file, format!("ggml-{}.bin", model.id));
-            assert!(model_upstream(model.id).ends_with(&file));
-            let sources = concat_host::models::sources(&file, &model_upstream(model.id));
-            let (mirror, upstream) = (&sources[0], &sources[1]);
-            assert!(mirror.contains(concat_host::models::RELEASE));
-            assert!(mirror.ends_with(&file));
-            assert_eq!(*upstream, model_upstream(model.id));
-            assert!(model.approx_bytes > 0);
-        }
-    }
-
-    #[test]
-    fn status_lists_every_model_undownloaded_in_an_empty_data_dir() {
+    fn status_lists_every_catalog_model_undownloaded_in_an_empty_data_dir() {
         let scratch =
             std::env::temp_dir().join(format!("concat-whisper-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&scratch);
         let status = Transcriber::status(&AppDirs::under(&scratch)).expect("status");
-        assert_eq!(status.models.len(), KNOWN_MODELS.len());
+        assert_eq!(status.models.len(), catalog::CATALOG.len());
         assert!(status.models.iter().all(|model| !model.downloaded));
+        assert!(status.models.iter().all(|model| !model.found));
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    #[test]
+    fn a_named_file_is_used_where_it_lies() {
+        // A catalogue id resolves under the models folder; an absolute path is
+        // the file itself (a found or hand-picked model).
+        let scratch =
+            std::env::temp_dir().join(format!("concat-whisper-path-{}", std::process::id()));
+        let dirs = AppDirs::under(&scratch);
+        assert_eq!(
+            run_model_file(&dirs, "base.en").expect("a path"),
+            models_dir(&dirs).expect("a dir").join("ggml-base.en.bin")
+        );
+        let picked = scratch.join("my-model.gguf");
+        assert_eq!(
+            run_model_file(&dirs, &picked.to_string_lossy()).expect("a path"),
+            picked
+        );
         let _ = std::fs::remove_dir_all(&scratch);
     }
 }

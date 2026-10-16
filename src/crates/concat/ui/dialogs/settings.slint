@@ -38,6 +38,10 @@ export struct ModelData {
     /// "42 MB of 142 MB · 3.1 MB/s"
     transferred: string,
     eta: string,
+    /// Where the model came from: 0 a catalogue model, 1 one found on disk,
+    /// 2 one the user picked. Foreign models are not ours to download or
+    /// remove, so the row shows no button for them.
+    origin: int,
 }
 
 /// One line of the system report: what it is called, and what it says.
@@ -233,7 +237,10 @@ component ModelRow inherits Rectangle {
                     clicked => { root.cancel(); }
                 }
 
-                if !root.model.downloading && root.model.installed: Button {
+                // A found model is shown but not touched: the file is not
+                // Concat's. A chosen one is forgotten with Remove; a catalogue
+                // one is deleted from disk.
+                if !root.model.downloading && root.model.installed && root.model.origin != 1: Button {
                     label: I18n.t("common.remove");
                     glyph: Glyph.trash;
                     danger: true;
@@ -467,6 +474,8 @@ export component SettingsDialog inherits Modal {
     callback model-download(id: string);
     callback model-cancel(id: string);
     callback model-remove(id: string);
+    /// Pick a model file of one's own for transcription.
+    callback transcriber-browse();
 
     /// `Theme.accent-names`, each in the chosen language, in the same order.
     /// A second list rather than a lookup on the first because the string
@@ -946,6 +955,19 @@ export component SettingsDialog inherits Modal {
                         download => { root.model-download(model.id); }
                         cancel => { root.model-cancel(model.id); }
                         remove => { root.model-remove(model.id); }
+                    }
+
+                    // A model the user already has somewhere on disk can be
+                    // named outright, and Concat uses it where it lies.
+                    HorizontalLayout {
+                        padding-top: 2px;
+                        alignment: start;
+                        Button {
+                            label: I18n.t("settings.addModelFile");
+                            glyph: Glyph.import;
+                            ghost: true;
+                            clicked => { root.transcriber-browse(); }
+                        }
                     }
 
                     HorizontalLayout {

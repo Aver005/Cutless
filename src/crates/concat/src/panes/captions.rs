@@ -21,7 +21,7 @@ use concat_speech::JobStage;
 use concat_speech::transcribe::Segment;
 
 use crate::host::{on_ui_in_project, spawn_in_project};
-use crate::i18n::{t, tf};
+use crate::i18n::{Language, t, tf};
 use crate::panes::Msg;
 use crate::panes::pace::{Pace, Stage, Timings};
 use crate::panes::settings::installed;
@@ -52,6 +52,11 @@ pub enum CaptionsMsg {
     SourceChanged(i32),
     TextEdited(String),
     ModelChanged(i32),
+    /// Row in the language list.
+    LanguageChanged(i32),
+    /// The transcriber's worker reporting which languages the chosen model
+    /// knows; an error falls back to the short popular list.
+    Languages(Result<Vec<String>, String>),
     PlacementChanged(i32),
     SizeChanged(i32),
     /// Run the pass the sheet describes.
@@ -97,6 +102,11 @@ pub struct CaptionsPane {
     pub text: String,
     /// Row in the installed transcriber list.
     pub model: usize,
+    /// The language rows: Auto first, then the model's own codes (or a short
+    /// popular list until the model's languages are known).
+    language_codes: Vec<String>,
+    /// Row in [`Self::language_codes`].
+    language: usize,
     /// 0 bottom, 1 centre, 2 top.
     pub placement: usize,
     /// 0 small, 1 medium, 2 large.
@@ -146,7 +156,26 @@ impl CaptionsPane {
                 }
             }
             CaptionsMsg::TextEdited(text) => self.text = text,
-            CaptionsMsg::ModelChanged(index) => self.model = index.max(0) as usize,
+            CaptionsMsg::ModelChanged(index) => {
+                self.model = index.max(0) as usize;
+                // A new model means a new language list, and a fresh default.
+                self.language_codes = language_rows(&[]);
+                self.language = 0;
+                self.request_languages(studio);
+            }
+            CaptionsMsg::LanguageChanged(index) => {
+                let row = index.max(0) as usize;
+                self.language = row.min(self.language_codes.len().saturating_sub(1));
+            }
+            CaptionsMsg::Languages(result) => {
+                self.language_codes = language_rows(&result.unwrap_or_default());
+                // Start on the interface's language where the model knows it,
+                // but do not pull a choice the user already made back to Auto.
+                if self.language == 0 {
+                    self.language =
+                        default_language_row(&self.language_codes, &crate::i18n::current());
+                }
+            }
             CaptionsMsg::PlacementChanged(index) => {
                 self.placement = (index.max(0) as usize).min(2);
             }
@@ -230,11 +259,32 @@ impl CaptionsPane {
             from_voice,
             clip,
             model,
+            language_codes: language_rows(&[]),
+            language: 0,
             placement: 0,
             size: 1,
             timings: std::mem::take(&mut self.timings),
             ..CaptionsPane::default()
         };
+        self.request_languages(studio);
+    }
+
+    /// Asks the transcriber, on a worker, which languages the chosen model
+    /// knows; the answer comes back as [`CaptionsMsg::Languages`]. Nothing is
+    /// asked when no model is installed yet.
+    fn request_languages(&self, studio: &Studio) {
+        let Some(model) = installed(&studio.settings.transcribers)
+            .get(self.model)
+            .map(|model| model.id.clone())
+        else {
+            return;
+        };
+        let dirs = studio.host.dirs.clone();
+        let transcriber = Arc::clone(&studio.host.transcriber);
+        spawn_in_project(
+            move || transcriber.languages(&dirs, &model),
+            |studio, _, _, result| studio.handle(Msg::Captions(CaptionsMsg::Languages(result))),
+        );
     }
 
     /// A caption's look, by the sheet's rows: where it sits and its size.
@@ -287,13 +337,18 @@ impl CaptionsPane {
             self.message = t("captions.downloadTranscriberModelFirst");
             return;
         };
+        let language = self
+            .language_codes
+            .get(self.language)
+            .filter(|code| !code.is_empty())
+            .cloned();
         let request = concat_speech::transcribe::TranscribeRequest {
             path: media.path.clone(),
             audio_stream: clip.audio_stream,
             source_start: clip.source_start,
             window: clip.duration * clip.speed,
             model_id: model.clone(),
-            language: None,
+            language,
         };
         let dirs = studio.host.dirs.clone();
         let transcriber = Arc::clone(&studio.host.transcriber);
@@ -355,6 +410,11 @@ impl CaptionsPane {
             .into_iter()
             .map(|source| source.label.into())
             .collect();
+        let languages: Vec<slint::SharedString> = self
+            .language_codes
+            .iter()
+            .map(|code| language_label(code, &studio.languages).into())
+            .collect();
         CaptionsSheetData {
             open: self.open,
             from_voice: self.from_voice,
@@ -362,6 +422,8 @@ impl CaptionsPane {
             source,
             text: self.text.as_str().into(),
             model: self.model as i32,
+            languages: std::rc::Rc::new(slint::VecModel::from(languages)).into(),
+            language: self.language as i32,
             placement: self.placement as i32,
             size: self.size as i32,
             running: self.running,
@@ -424,6 +486,70 @@ fn source_label(name: &str, start: f64) -> String {
     } else {
         format!("{name} · {minutes}:{seconds:02}")
     }
+}
+
+/// The languages offered when a model's own list is not known yet: a short
+/// spread of the common ones, Russian and English included.
+const POPULAR_LANGUAGES: &[&str] = &[
+    "ru", "en", "de", "es", "fr", "it", "pt", "uk", "pl", "tr", "zh", "ja",
+];
+
+/// The language rows: Auto first, then Russian and English, then the model's
+/// own codes - or [`POPULAR_LANGUAGES`] while the model's list is unknown.
+/// A code already present by its base language ("ru-RU" beside "ru") is left
+/// out, so the list stays short.
+fn language_rows(model: &[String]) -> Vec<String> {
+    let mut rows = vec![String::new(), "ru".to_owned(), "en".to_owned()];
+    let source: Vec<String> = if model.is_empty() {
+        POPULAR_LANGUAGES
+            .iter()
+            .map(|code| (*code).to_owned())
+            .collect()
+    } else {
+        model.to_vec()
+    };
+    for code in source {
+        let base = base_language(&code);
+        let seen = rows
+            .iter()
+            .any(|row| !row.is_empty() && base_language(row) == base);
+        if !seen {
+            rows.push(code);
+        }
+    }
+    rows
+}
+
+/// The row a fresh sheet starts on: the interface's own language where the
+/// model knows it, else Auto (row 0).
+fn default_language_row(rows: &[String], interface: &str) -> usize {
+    let wanted = base_language(interface);
+    rows.iter()
+        .position(|row| !row.is_empty() && base_language(row) == wanted)
+        .unwrap_or(0)
+}
+
+/// The base of a language code: "ru-RU" is "ru". Lowercase, for matching.
+fn base_language(code: &str) -> String {
+    code.split('-').next().unwrap_or(code).to_ascii_lowercase()
+}
+
+/// A display name for an ASR language code: the interface's own name where it
+/// ships that locale, else the code itself. The empty row is "Auto".
+fn language_label(code: &str, interface: &[Language]) -> String {
+    if code.is_empty() {
+        return t("common.auto");
+    }
+    interface
+        .iter()
+        .find(|language| language.code == code)
+        .or_else(|| {
+            interface
+                .iter()
+                .find(|language| base_language(&language.code) == base_language(code))
+        })
+        .map(|language| language.name.clone())
+        .unwrap_or_else(|| code.to_owned())
 }
 
 /// One caption as a title clip: its words, when and for how long, and
@@ -556,7 +682,32 @@ fn wrap_caption(sentence: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{script_captions, source_label};
+    use super::{default_language_row, language_rows, script_captions, source_label};
+
+    /// The language rows start with Auto, Russian and English, and the model's
+    /// own codes follow without repeating a base language already listed.
+    #[test]
+    fn the_language_list_leads_with_auto_russian_and_english() {
+        let rows = language_rows(&["ru-RU".to_owned(), "en-US".to_owned(), "de-DE".to_owned()]);
+        assert_eq!(rows[0], "");
+        assert_eq!(rows[1], "ru");
+        assert_eq!(rows[2], "en");
+        assert_eq!(rows[3], "de-DE");
+        // An unknown model falls back to the short popular list.
+        let popular = language_rows(&[]);
+        assert_eq!(popular[0], "");
+        assert!(popular.contains(&"de".to_owned()));
+    }
+
+    /// The default row is the interface's language where the model knows it,
+    /// and Auto where it does not.
+    #[test]
+    fn the_default_language_is_the_interfaces_where_it_is_known() {
+        let rows = language_rows(&["ru-RU".to_owned(), "en-US".to_owned()]);
+        assert_eq!(default_language_row(&rows, "ru"), 1);
+        assert_eq!(default_language_row(&rows, "en"), 2);
+        assert_eq!(default_language_row(&rows, "ja"), 0);
+    }
 
     /// A clip in the voice list is its file and where it starts, in
     /// minutes and seconds, with hours once there are any.
