@@ -924,6 +924,8 @@ pub struct Studio {
     pub speech: crate::panes::speech::SpeechPane,
     /// The pauses sheet and the pause-removal marks on the timeline.
     pub pauses: crate::panes::pauses::PausesPane,
+    /// Cutless: the beat grid analysis of the selected clip.
+    pub beats: crate::panes::beats::BeatsPane,
     /// Cutless: an agent's edits through the server, and what they touched.
     pub agent: crate::panes::agent::AgentPane,
     /// A file from the library lent the monitor and the speakers; see
@@ -2265,6 +2267,7 @@ impl Studio {
             captions: crate::panes::captions::CaptionsPane::default(),
             speech: crate::panes::speech::SpeechPane::default(),
             pauses: crate::panes::pauses::PausesPane::default(),
+            beats: crate::panes::beats::BeatsPane::default(),
             agent: crate::panes::agent::AgentPane::default(),
             source: None,
             meters: crate::meters::MeterFeed::default(),
@@ -2557,6 +2560,15 @@ impl Studio {
             }
             consider(clip.start as f32);
             consider((clip.start + clip.duration) as f32);
+            // Cutless: a music clip's beats pull too, or only its bars when beats crowd.
+            if let Some(beat) = crate::beat_marks::nearest(
+                self.project(),
+                clip,
+                f64::from(time),
+                f64::from(threshold),
+            ) {
+                consider(beat as f32);
+            }
         }
         best
     }
@@ -7878,6 +7890,10 @@ impl Studio {
         self.captions.pace = Default::default();
         self.speech.running = false;
         self.speech.pace = Default::default();
+        // Cutless: the pauses sheet and a beats run belong to the closed project.
+        self.pauses.open = false;
+        self.pauses.running = false;
+        self.beats = Default::default();
         self.source = None;
         // A take running as the project closes stops, keeping its file;
         // the next project's speakers are not left silent.
@@ -7970,6 +7986,11 @@ impl Studio {
                 let mut pane = std::mem::take(&mut self.pauses);
                 pane.update(msg, self);
                 self.pauses = pane;
+            }
+            crate::panes::Msg::Beats(msg) => {
+                let mut pane = std::mem::take(&mut self.beats);
+                pane.update(msg, self);
+                self.beats = pane;
             }
             crate::panes::Msg::Voiceover(msg) => {
                 let mut pane = std::mem::take(&mut self.voiceover);
@@ -8413,6 +8434,8 @@ impl Studio {
                         } else {
                             Default::default()
                         };
+                    // Cutless: the beat grid's ticks, for a clip whose sound has one.
+                    let marks = crate::beat_marks::marks(self.project(), clip);
                     ClipData {
                         id: clip.id.as_str().into(),
                         name: clip.name.as_str().into(),
@@ -8446,6 +8469,15 @@ impl Studio {
                         strip: self.strip_of(clip),
                         pause: is_pause(clip),
                         agent: self.agent.touched(&clip.id, self.revision),
+                        beat_first: marks.first,
+                        beat_step: marks.step,
+                        beat_count: marks.count,
+                        beat_bar: marks.bar,
+                        beat_bar_len: marks.bar_len,
+                        drop_a: marks.drops[0],
+                        drop_b: marks.drops[1],
+                        drop_c: marks.drops[2],
+                        drop_d: marks.drops[3],
                     }
                 })
                 .collect(),
@@ -8462,6 +8494,12 @@ impl Studio {
             pause_count += 1;
             pause_seconds += clip.duration;
         }
+        // Cutless: whether the selected clip's sound can be heard for beats.
+        let (available, summary) = self.beats.state(self);
+        let beats = app.global::<BeatsState>();
+        beats.set_available(available);
+        beats.set_running(self.beats.running);
+        beats.set_summary(summary.into());
         let pauses = app.global::<PausesState>();
         pauses.set_open(pause_count > 0);
         pauses.set_count(pause_count);

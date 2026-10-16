@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
 
 import { Wave } from "../primitives/wave.slint";
+import { BeatTicks } from "beat-ticks.slint";
 import { Theme } from "../theme/theme.slint";
 import { Fmt, Payload } from "../util.slint";
 import { Glyph, Icon } from "../icons.slint";
@@ -416,7 +417,20 @@ component Clip inherits Rectangle {
             ramp-h: root.fade-h;
         }
 
-
+        // Cutless: the beat grid of a music clip, over the frames and the wave.
+        if root.item.beat-count > 0 && root.width > 0px: BeatTicks {
+            width: parent.width;
+            height: parent.height;
+            first-x: root.item.beat-first * root.px-per-second;
+            step: root.item.beat-step * root.px-per-second;
+            count: root.item.beat-count;
+            bar: root.item.beat-bar;
+            bar-len: root.item.beat-bar-len;
+            vis-start: Math.min(root.width, Math.max(0px, -root.x));
+            vis-end: Math.max(0px, Math.min(root.width, -root.x + root.viewport-width));
+            drops: [root.item.drop-a * root.px-per-second, root.item.drop-b * root.px-per-second,
+                root.item.drop-c * root.px-per-second, root.item.drop-d * root.px-per-second];
+        }
     }
 
     // ── header ───────────────────────────────────────────────────────────

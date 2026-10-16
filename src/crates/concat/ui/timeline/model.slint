@@ -136,6 +136,19 @@ export struct ClipData {
     /// The frames a picture clip tiles along its body; `frames` is 0 when
     /// there are none yet.
     strip: StripData,
+    /// Cutless: the beat grid under a music clip, in seconds from the clip's
+    /// start - the first beat, the step, how many; 0 beats is no grid.
+    beat-first: float,
+    beat-step: float,
+    beat-count: int,
+    /// which of the clip's beats is the first downbeat, and beats to a bar
+    beat-bar: int,
+    beat-bar-len: int,
+    /// up to four drops, seconds from the clip's start; -1 is none
+    drop-a: float,
+    drop-b: float,
+    drop-c: float,
+    drop-d: float,
 }
 
 

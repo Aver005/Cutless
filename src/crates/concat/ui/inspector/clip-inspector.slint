@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Jareer and Concat contributors
 
+import { BeatsState } from "../dialogs/beats.slint";
 import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
 import { Glyph, Icon } from "../icons.slint";
@@ -1740,6 +1741,29 @@ export component AudioPanel inherits VerticalLayout {
                     root.set(ClipField.preserve-pitch, on ? 0 : 1);
                     root.commit();
                 }
+            }
+        }
+    }
+
+    // Cutless: «Склянки» - the beat grid of the clip's sound, for cutting
+    // and hitting on the music; the ticks show on the clip in the lanes.
+    if BeatsState.available: Section {
+        bells := SectionHeader {
+            title: I18n.t("beats.title");
+            collapsible: true;
+            summary: BeatsState.summary;
+            HelpButton {
+                text: I18n.t("beats.help");
+            }
+        }
+
+        if bells.open: SectionBody {
+            Button {
+                label: BeatsState.running ? I18n.t("beats.running") : I18n.t("beats.analyze");
+                accessible-role: button;
+                accessible-label: I18n.t("beats.analyze");
+                enabled: !BeatsState.running;
+                clicked => { BeatsState.analyze(); }
             }
         }
     }

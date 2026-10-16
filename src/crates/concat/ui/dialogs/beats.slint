@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Cutless contributors
+
+// «Склянки»: сетка долей выделенного клипа. Состояние на глобальном объекте, чтобы
+// аудиопанель не протаскивала его через все слои инспектора.
+
+/// Склянки выделенного клипа.
+export global BeatsState {
+    /// Выделен один клип со звуком: его можно разобрать.
+    in property <bool> available;
+    /// Разбор идёт.
+    in property <bool> running;
+    /// Темп уже разобранной сетки, например «128.0 BPM»; пусто, пока не разобрана.
+    in property <string> summary;
+    /// «Отбить склянки».
+    callback analyze();
+}

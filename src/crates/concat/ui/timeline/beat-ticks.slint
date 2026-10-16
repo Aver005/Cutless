@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Cutless contributors
+
+import { Theme } from "../theme/theme.slint";
+
+/// Сетка долей клипа: высокая риска на такте, короткая на доле, дропы горячим цветом.
+/// Рисуется только видимая часть клипа, как плитки плёнки.
+export component BeatTicks inherits Rectangle {
+    /// Первая доля от начала клипа.
+    in property <length> first-x;
+    /// Шаг доли.
+    in property <length> step;
+    /// Долей под клипом.
+    in property <int> count;
+    /// Номер первой сильной доли, от 0 до `bar-len`.
+    in property <int> bar;
+    in property <int> bar-len;
+    /// Видимая часть клипа.
+    in property <length> vis-start;
+    in property <length> vis-end;
+    /// Дропы от начала клипа; отрицательный — нет.
+    in property <[length]> drops;
+
+    clip: true;
+
+    /// Ближе этого риски не рисуются: доли уступают тактам, такты прореживаются вдвое.
+    property <length> min-gap: 6px;
+    /// Больше рисок на видимую часть клипа не бывает.
+    property <int> max-ticks: 240;
+
+    property <int> beats-in-bar: Math.max(1, root.bar-len);
+    property <bool> beats: root.step >= root.min-gap;
+    property <length> bar-step: root.step * root.beats-in-bar;
+    // Такты тоже плотнее порога: каждый второй, четвёртый… до читаемого шага.
+    property <int> thin: root.beats || root.bar-step >= root.min-gap ? 1
+        : Math.pow(2, Math.ceil(Math.log(root.min-gap / Math.max(0.001px, root.bar-step), 2)));
+    property <int> stride: root.beats ? 1 : root.beats-in-bar * root.thin;
+    property <int> origin: root.beats ? 0 : root.bar;
+    property <int> lead: Math.max(0, Math.ceil((root.vis-start - root.first-x) / Math.max(0.001px, root.step)));
+    property <int> start: root.origin + Math.max(0, Math.ceil((root.lead - root.origin) / root.stride)) * root.stride;
+    property <int> ticks: root.vis-end <= root.vis-start ? 0
+        : Math.max(0, Math.min(root.max-ticks, Math.min(
+            Math.ceil((root.vis-end - root.vis-start) / Math.max(0.001px, root.step * root.stride)) + 1,
+            Math.ceil((root.count - root.start) / root.stride))));
+
+    for j in root.ticks: Rectangle {
+        property <int> index: root.start + j * root.stride;
+        property <bool> downbeat: Math.mod(self.index - root.bar + root.beats-in-bar, root.beats-in-bar) == 0;
+        x: root.first-x + self.index * root.step;
+        y: self.downbeat ? 0 : root.height * 0.7;
+        width: 1px;
+        height: self.downbeat ? root.height : root.height * 0.3;
+        background: self.downbeat ? Theme.fade-edge : Theme.wave-centre;
+    }
+
+    for drop in root.drops: Rectangle {
+        visible: drop >= 0px;
+        x: drop - 1px;
+        y: 0;
+        width: 2px;
+        height: root.height;
+        background: Theme.wave-hot;
+    }
+}

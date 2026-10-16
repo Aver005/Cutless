@@ -47,6 +47,7 @@ mod platform;
 /// `platform::publish_export`.
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub use platform::{ExportPublisher, FilePicker, install_export_publisher, install_file_picker};
+mod beat_marks;
 mod panes;
 mod prefs;
 mod presets;
@@ -1805,6 +1806,10 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     app.on_pauses_begin(on_window!(|state| {
         state.handle(Msg::Pauses(PausesMsg::Begin));
+    }));
+    // Cutless: «Склянки», the beat grid of the selected clip.
+    app.global::<BeatsState>().on_analyze(on_window!(|state| {
+        state.handle(Msg::Beats(crate::panes::beats::BeatsMsg::Begin));
     }));
 
     // ── the first-launch introduction ──

@@ -15,6 +15,7 @@
 //! export sheet is the first, and the shape the rest follow.
 
 pub mod agent;
+pub mod beats;
 pub mod captions;
 pub mod export;
 pub mod media_bin;
@@ -43,6 +44,8 @@ pub enum Msg {
     Captions(captions::CaptionsMsg),
     /// To the pauses sheet.
     Pauses(pauses::PausesMsg),
+    /// Cutless: the beat grid of the selected clip.
+    Beats(beats::BeatsMsg),
     /// To the speech sheet.
     Speech(speech::SpeechMsg),
     /// To the missing media dialog.
