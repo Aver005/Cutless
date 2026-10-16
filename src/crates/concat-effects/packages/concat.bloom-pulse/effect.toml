@@ -19,6 +19,7 @@ max = 100
 default = 50
 step = 1
 unit = "%"
+animate = true
 
 [[param]]
 key = "speed"

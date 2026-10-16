@@ -15,11 +15,12 @@ description = "A soft bloom around the bright parts of the picture."
 [[param]]
 key = "amount"
 label = "Amount"
-min = 10
+min = 0
 max = 100
 default = 45
 step = 1
 unit = "%"
+animate = true
 
 [wgsl]
 entry = "effect.wgsl"

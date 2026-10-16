@@ -1,0 +1,27 @@
+format = 2
+
+[effect]
+id = "cutless.mirror-tile"
+name = "Mirror Tile"
+kind = "effect"
+category = "Distort"
+order = 55
+intensity = "tiles"
+description = "The picture tiled and mirrored into a symmetrical pattern."
+
+[[param]]
+key = "tiles"
+label = "Tiles"
+min = 1
+max = 6
+default = 2
+step = 1
+animate = true
+
+[wgsl]
+entry = "effect.wgsl"
+
+[[replaces]]
+id = "concat.mirror-tile"
+defaults = { tiles = 2 }
+knobs = { tiles = "tiles" }

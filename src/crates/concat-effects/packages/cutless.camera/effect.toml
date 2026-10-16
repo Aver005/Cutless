@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Cutless contributors
+format = 2
+
+[effect]
+id = "cutless.camera"
+name = "Camera"
+kind = "effect"
+category = "Zoom"
+order = 10
+intensity = "zoom"
+description = "A virtual camera over the layer: push in, pan, turn, tilt and smear, keyable across the cuts."
+
+[[param]]
+key = "zoom"
+label = "Zoom"
+min = 100
+max = 400
+default = 100
+step = 1
+unit = "%"
+animate = true
+
+# Сдвиг картинки в долях кадра: x — по ширине, плюс вправо; y — по высоте,
+# плюс вниз.
+[[param]]
+key = "x"
+label = "Shift X"
+min = -50
+max = 50
+default = 0
+step = 0.1
+unit = "%"
+animate = true
+
+[[param]]
+key = "y"
+label = "Shift Y"
+min = -50
+max = 50
+default = 0
+step = 0.1
+unit = "%"
+animate = true
+
+[[param]]
+key = "rotation"
+label = "Rotation"
+min = -180
+max = 180
+default = 0
+step = 0.5
+unit = "°"
+animate = true
+
+# Наклон плоскости кадра, плюс — верх уходит от зрителя.
+[[param]]
+key = "tilt"
+label = "Tilt"
+min = -30
+max = 30
+default = 0
+step = 0.5
+unit = "°"
+animate = true
+
+# Смаз движения: длина в процентах ширины кадра, направление отдельной ручкой.
+[[param]]
+key = "blur"
+label = "Blur"
+min = 0
+max = 10
+default = 0
+step = 0.1
+unit = "%"
+animate = true
+
+[[param]]
+key = "blur_angle"
+label = "Blur angle"
+min = -180
+max = 180
+default = 0
+step = 1
+unit = "°"
+animate = true
+
+# Что за краем кадра: зеркало или растянутый край.
+[[param]]
+key = "edges"
+label = "Edges"
+type = "enum"
+min = 0
+max = 1
+default = 0
+values = [0, 1]
+labels = ["Mirror", "Stretch"]
+
+[wgsl]
+entry = "effect.wgsl"
+
+# На умолчаниях камера не трогает кадр; карточка показывает наезд и поворот.
+[card]
+params = { zoom = 200, rotation = 15 }

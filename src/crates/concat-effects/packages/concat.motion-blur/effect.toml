@@ -19,6 +19,7 @@ max = 60
 default = 18
 step = 1
 unit = "px"
+animate = true
 
 [[param]]
 key = "angle"
@@ -28,6 +29,7 @@ max = 90
 default = 0
 step = 1
 unit = "°"
+animate = true
 
 [wgsl]
 entry = "effect.wgsl"

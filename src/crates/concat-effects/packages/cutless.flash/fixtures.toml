@@ -1,0 +1,35 @@
+# По умолчанию вспышка выключена; на 100 % серый 0.18 становится 1.68.
+
+[[probe]]
+name = "default, a grey"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "default, a highlight past white"
+input = [4, 1, 0.05, 1]
+expect = [4, 1, 0.05, 1]
+
+[[probe]]
+name = "minimum, a grey"
+at = "min"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "maximum, a grey"
+at = "max"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "full flash, a grey"
+params = { amount = 100 }
+input = [0.18, 0.18, 0.18, 1]
+expect = [1.68, 1.68, 1.68, 1]
+
+[[probe]]
+name = "full flash, a highlight past white"
+params = { amount = 100 }
+input = [4, 1, 0.05, 1]
+expect = [5.5, 2.5, 1.55, 1]

@@ -1,0 +1,29 @@
+# На ровной картинке сдвиг полосы не виден: все пиксели одного цвета.
+
+[[probe]]
+name = "default, a grey"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "minimum, a grey"
+at = "min"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "maximum, a grey"
+at = "max"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "default, a highlight past white"
+input = [4, 1, 0.05, 1]
+expect = [4, 1, 0.05, 1]
+
+[[probe]]
+name = "wide bands, half transparent"
+params = { bands = 40, amount = 80 }
+input = [0.5, 0.2, 0.1, 0.5]
+expect = [0.5, 0.2, 0.1, 0.5]

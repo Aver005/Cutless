@@ -21,7 +21,7 @@ expect = [4.0, 1.0, 0.097502, 1]
 name = "minimum, a grey"
 at = "min"
 input = [0.18, 0.18, 0.18, 1]
-expect = [0.20285, 0.20285, 0.20285, 1]
+expect = [0.18, 0.18, 0.18, 1]
 
 [[probe]]
 name = "maximum, a grey"

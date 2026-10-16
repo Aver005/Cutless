@@ -1,0 +1,47 @@
+format = 2
+
+[effect]
+id = "cutless.rgb-glitch"
+name = "RGB Glitch"
+kind = "effect"
+category = "Glitch"
+order = 2
+intensity = "amount"
+description = "Horizontal bands slip aside and the colour channels split, a digital fault."
+
+[[param]]
+key = "amount"
+label = "Amount"
+min = 0
+max = 100
+default = 50
+step = 1
+unit = "%"
+animate = true
+
+[[param]]
+key = "frequency"
+label = "Frequency"
+min = 1
+max = 30
+default = 8
+step = 1
+unit = "Hz"
+animate = true
+
+[[param]]
+key = "bands"
+label = "Bands"
+min = 4
+max = 64
+default = 16
+step = 1
+animate = true
+
+[wgsl]
+entry = "effect.wgsl"
+
+[[replaces]]
+id = "concat.rgb-glitch"
+defaults = { amount = 50, frequency = 8 }
+knobs = { amount = "amount", frequency = "frequency", bands = "16" }

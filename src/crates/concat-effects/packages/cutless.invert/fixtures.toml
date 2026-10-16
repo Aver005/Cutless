@@ -1,0 +1,34 @@
+# Серый 0.18 при полной инверсии даёт 0.82; блик [4, 1, 0.05] гаснет до [0, 0, 0.95].
+
+[[probe]]
+name = "default, a grey"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.82, 0.82, 0.82, 1]
+
+[[probe]]
+name = "default, a highlight past white"
+input = [4, 1, 0.05, 1]
+expect = [0, 0, 0.95, 1]
+
+[[probe]]
+name = "default, half transparent"
+input = [0.5, 0.2, 0.1, 0.5]
+expect = [0.5, 0.8, 0.9, 0.5]
+
+[[probe]]
+name = "minimum, a grey"
+at = "min"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "maximum, a grey"
+at = "max"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.82, 0.82, 0.82, 1]
+
+[[probe]]
+name = "half a turn, a grey"
+params = { amount = 50 }
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.5, 0.5, 0.5, 1]

@@ -1,0 +1,30 @@
+# При t = 0 пятно стоит у угла за пределами мягкого окна, поэтому центр не тронут.
+
+[[probe]]
+name = "default, a grey"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "minimum, a grey"
+at = "min"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "maximum, a grey"
+at = "max"
+input = [0.18, 0.18, 0.18, 1]
+expect = [0.18, 0.18, 0.18, 1]
+
+[[probe]]
+name = "no amount, a highlight past white"
+params = { amount = 0 }
+input = [4, 1, 0.05, 1]
+expect = [4, 1, 0.05, 1]
+
+[[probe]]
+name = "still, half transparent"
+params = { speed = 0 }
+input = [0.5, 0.2, 0.1, 0.5]
+expect = [0.5, 0.2, 0.1, 0.5]

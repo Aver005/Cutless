@@ -1,0 +1,28 @@
+format = 2
+
+[effect]
+id = "cutless.hue-shift"
+name = "Hue Shift"
+kind = "effect"
+category = "Color"
+order = 20
+intensity = "angle"
+description = "Every colour turned around the wheel by the same angle."
+
+[[param]]
+key = "angle"
+label = "Angle"
+min = -180
+max = 180
+default = 0
+step = 1
+unit = "°"
+animate = true
+
+[wgsl]
+entry = "effect.wgsl"
+
+[[replaces]]
+id = "concat.hue-shift"
+defaults = { angle = 60 }
+knobs = { angle = "angle" }

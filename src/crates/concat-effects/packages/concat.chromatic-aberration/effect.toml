@@ -20,6 +20,7 @@ max = 24
 default = 4
 step = 1
 unit = "px"
+animate = true
 
 [wgsl]
 entry = "effect.wgsl"

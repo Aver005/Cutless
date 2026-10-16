@@ -1,0 +1,39 @@
+format = 2
+
+[effect]
+id = "cutless.rgb-split"
+name = "RGB Split"
+kind = "effect"
+category = "Glitch"
+order = 18
+intensity = "shift"
+description = "Red and blue pull apart along a direction, the colour split of a glitch."
+
+[[param]]
+key = "shift"
+label = "Shift"
+min = 0
+max = 3
+default = 0.6
+step = 0.05
+unit = "%"
+animate = true
+
+[[param]]
+key = "angle"
+label = "Angle"
+min = -180
+max = 180
+default = 0
+step = 1
+unit = "°"
+animate = true
+
+[wgsl]
+entry = "effect.wgsl"
+
+# Старый сдвиг в пикселях: ширина кадра примерно 19.2 px на процент.
+[[replaces]]
+id = "concat.rgb-split"
+defaults = { shift = 10 }
+knobs = { shift = "shift / 19.2" }

@@ -1,0 +1,43 @@
+format = 2
+
+[effect]
+id = "cutless.flash"
+name = "Flash"
+kind = "effect"
+category = "Light"
+order = 73
+intensity = "amount"
+description = "A white flash added over the picture, even or strobing, for accents on the beat."
+
+[[param]]
+key = "amount"
+label = "Amount"
+min = 0
+max = 100
+default = 0
+step = 1
+unit = "%"
+animate = true
+
+[[param]]
+key = "frequency"
+label = "Frequency"
+min = 0
+max = 30
+default = 0
+step = 0.5
+unit = "Hz"
+animate = true
+
+[wgsl]
+entry = "effect.wgsl"
+
+# По умолчанию вспышка выключена: карточка в каталоге показывает её на 80 %.
+[card]
+params = { amount = 80 }
+
+# Старый стробоскоп: сила вспышки и её частота переносятся напрямую.
+[[replaces]]
+id = "concat.strobe-flash"
+defaults = { strength = 80, frequency = 10 }
+knobs = { amount = "strength", frequency = "frequency" }

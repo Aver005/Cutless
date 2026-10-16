@@ -20,6 +20,7 @@ min = 2
 max = 40
 default = 12
 step = 1
+animate = true
 
 [wgsl]
 entry = "effect.wgsl"

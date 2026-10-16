@@ -1,0 +1,29 @@
+format = 2
+
+[effect]
+id = "cutless.invert"
+name = "Invert"
+kind = "effect"
+category = "Color"
+order = 34
+intensity = "amount"
+description = "Every colour becomes its opposite, and a highlight above white dims to white first."
+
+[[param]]
+key = "amount"
+label = "Amount"
+min = 0
+max = 100
+default = 100
+step = 1
+unit = "%"
+animate = true
+
+[wgsl]
+entry = "effect.wgsl"
+
+# У старого пакета ручек не было: инверсия была полной.
+[[replaces]]
+id = "concat.invert"
+defaults = {}
+knobs = { amount = "100" }
