@@ -69,10 +69,11 @@ mod tests {
         }
     }
 
-    /// Все 25 имён, что группа обязана зарегистрировать.
-    const NAMES: [&str; 25] = [
+    /// Все 26 имён, что группа обязана зарегистрировать.
+    const NAMES: [&str; 26] = [
         "project_open",
         "project_create",
+        "project_on_screen",
         "project_save",
         "project_settings",
         "timeline_summary",
@@ -106,6 +107,7 @@ mod tests {
                 "project_create",
                 json!({ "location": "/tmp", "name": "New" }),
             ),
+            ("project_on_screen", json!({})),
             ("project_save", json!({})),
             ("project_settings", json!({ "width": 1080, "fps": 25.0 })),
             ("timeline_summary", json!({})),
@@ -223,6 +225,87 @@ mod tests {
             Err(ToolError::NoProject) => {}
             other => panic!("expected NoProject, got {other:?}"),
         }
+    }
+
+    /// Проект, как его называет окно в ответе `project.onScreen`.
+    fn on_screen(path: &str, name: &str) -> concat_host::ProjectInfo {
+        concat_host::ProjectInfo {
+            path: path.to_owned(),
+            name: name.to_owned(),
+            width: 1920,
+            height: 1080,
+            rate_num: 30,
+            rate_den: 1,
+            opened_at: 0,
+        }
+    }
+
+    /// Ответ окна со списком открытых проектов.
+    fn window_reply(projects: Vec<concat_host::ProjectInfo>) -> Response {
+        Response::Result(concat_api::Reply::Projects(projects))
+    }
+
+    #[test]
+    fn project_on_screen_with_nothing_open_says_so() {
+        let registry = registry();
+        let mut mock = Mock {
+            reply: window_reply(Vec::new()),
+            seen: Vec::new(),
+        };
+        let mut ctx = ToolContext {
+            editor: &mut mock,
+            project: None,
+        };
+        let output = registry
+            .call(&mut ctx, "project_on_screen", json!({}))
+            .expect("ran");
+        assert!(
+            output.text.contains("no project is open"),
+            "{}",
+            output.text
+        );
+        assert!(ctx.project.is_none());
+        assert_eq!(mock.seen, [Request::ProjectOnScreen]);
+    }
+
+    #[test]
+    fn project_on_screen_with_one_project_makes_it_current() {
+        let registry = registry();
+        let mut mock = Mock {
+            reply: window_reply(vec![on_screen("/p/One", "One")]),
+            seen: Vec::new(),
+        };
+        let mut ctx = ToolContext {
+            editor: &mut mock,
+            project: None,
+        };
+        let output = registry
+            .call(&mut ctx, "project_on_screen", json!({}))
+            .expect("ran");
+        assert_eq!(ctx.project.as_deref(), Some("/p/One"));
+        assert_eq!(
+            output.text,
+            "current project: One at /p/One (open in the Cutless window)"
+        );
+    }
+
+    #[test]
+    fn project_on_screen_with_several_lists_the_paths() {
+        let registry = registry();
+        let mut mock = Mock {
+            reply: window_reply(vec![on_screen("/p/One", "One"), on_screen("/p/Two", "Two")]),
+            seen: Vec::new(),
+        };
+        let mut ctx = ToolContext {
+            editor: &mut mock,
+            project: None,
+        };
+        let output = registry
+            .call(&mut ctx, "project_on_screen", json!({}))
+            .expect("ran");
+        assert!(output.text.contains("/p/One"), "{}", output.text);
+        assert!(output.text.contains("/p/Two"), "{}", output.text);
+        assert!(ctx.project.is_none(), "не выбираем, какой из нескольких");
     }
 
     #[test]

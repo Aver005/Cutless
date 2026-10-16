@@ -2,15 +2,16 @@
 // SPDX-FileCopyrightText: 2026 Cutless contributors
 
 //! Сервер MCP поверх реестра инструментов.
-//! Одна сессия на процесс: `Api` как редактор, проект живёт между вызовами.
+//! Одна сессия на процесс: редактор — окно Cutless или своя сессия API.
 
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 
-use cutless_tools::{Registry, ToolContext, ToolError, ToolOutput};
+use cutless_tools::{Editor, Registry, ToolContext, ToolError, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::protocol::{self, Call, RpcError};
+use crate::{remote::RemoteEditor, window::window_endpoint};
 
 /// Почему сервер не запустился или не смог писать.
 #[derive(Debug, thiserror::Error)]
@@ -18,6 +19,9 @@ pub enum McpError {
     /// Папки приложения не нашлись: некуда положить настройки и модели.
     #[error("не удалось определить папки приложения: {0}")]
     Dirs(String),
+    /// К окну Cutless не подключиться.
+    #[error("окно Cutless недоступно: {0}")]
+    Connect(String),
     /// Строку не удалось прочитать или записать.
     #[error("ошибка ввода-вывода: {0}")]
     Io(#[from] std::io::Error),
@@ -26,7 +30,8 @@ pub enum McpError {
 /// Сессия MCP: реестр инструментов, редактор и открытый проект.
 pub struct McpServer {
     registry: Registry,
-    api: concat_api::Api,
+    /// Кто выполняет запросы: окно Cutless или своя сессия API.
+    editor: Box<dyn Editor + Send>,
     /// Папка открытого проекта; её ставит `project_open`/`project_create`.
     project: Option<String>,
     /// Версия протокола, согласованная в `initialize`.
@@ -34,28 +39,64 @@ pub struct McpServer {
 }
 
 impl McpServer {
-    /// Сервер со всеми инструментами Cutless.
+    /// Сервер со всеми инструментами Cutless. Сначала пробует открытое окно
+    /// (если оно разрешило агентам правки), иначе работает со своим API.
     pub fn with_default_registry() -> Result<McpServer, McpError> {
-        McpServer::new(cutless_tools::default_registry())
+        McpServer::select_editor(false)
     }
 
-    /// Сервер с указанным реестром; события API идут в лог.
-    pub fn new(registry: Registry) -> Result<McpServer, McpError> {
+    /// Сервер только со своим API, без поиска окна: для `mcp --local`.
+    pub fn with_default_registry_local() -> Result<McpServer, McpError> {
+        McpServer::select_editor(true)
+    }
+
+    /// Выбирает редактора: окно Cutless, если оно есть и `local` не запрещает,
+    /// иначе свою сессию API. Что выбрано — пишем в лог.
+    fn select_editor(local: bool) -> Result<McpServer, McpError> {
+        if !local
+            && let Ok(dirs) = concat_api::AppDirs::locate()
+            && let Some((address, token)) = window_endpoint(&dirs.config)
+        {
+            match RemoteEditor::connect(address, &token) {
+                Ok(editor) => {
+                    log::info!(target: "cutless_mcp", "работаем через окно Cutless на {address}");
+                    return Ok(McpServer::with_editor(
+                        cutless_tools::default_registry(),
+                        Box::new(editor),
+                    ));
+                }
+                Err(error) => {
+                    log::info!(
+                        target: "cutless_mcp",
+                        "окно Cutless не подошло ({error}), работаем без него"
+                    );
+                }
+            }
+        }
         let events: concat_api::EventSink = Arc::new(|event| {
             log::info!(target: "cutless_mcp", "событие API: {event:?}");
         });
         let api = concat_api::Api::new(events).map_err(McpError::Dirs)?;
-        Ok(McpServer::with_api(registry, api))
+        log::info!(target: "cutless_mcp", "работаем со своим API, без окна");
+        Ok(McpServer::with_editor(
+            cutless_tools::default_registry(),
+            Box::new(api),
+        ))
+    }
+
+    /// Сервер над готовым редактором: окно, своя сессия или тест.
+    pub fn with_editor(registry: Registry, editor: Box<dyn Editor + Send>) -> McpServer {
+        McpServer {
+            registry,
+            editor,
+            project: None,
+            protocol_version: protocol::DEFAULT_PROTOCOL_VERSION.to_owned(),
+        }
     }
 
     /// Сервер над готовым API: для тестов и для встраивания.
     pub fn with_api(registry: Registry, api: concat_api::Api) -> McpServer {
-        McpServer {
-            registry,
-            api,
-            project: None,
-            protocol_version: protocol::DEFAULT_PROTOCOL_VERSION.to_owned(),
-        }
+        McpServer::with_editor(registry, Box::new(api))
     }
 
     /// Обрабатывает одну строку и возвращает строку ответа.
@@ -88,8 +129,6 @@ impl McpServer {
                 output.flush()?;
             }
         }
-        // Экспорт, начатый последней строкой, успевает дописать файл.
-        self.api.finish();
         Ok(())
     }
 
@@ -150,7 +189,7 @@ impl McpServer {
             Some(_) => return Err(RpcError::invalid_params("arguments — объект JSON")),
         };
         let mut ctx = ToolContext {
-            editor: &mut self.api,
+            editor: self.editor.as_mut(),
             project: self.project.clone(),
         };
         let outcome = self.registry.call(&mut ctx, name, arguments);

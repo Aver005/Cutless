@@ -125,7 +125,12 @@ enum Command {
     /// Serve the Cutless tool registry to an agent as a Model Context
     /// Protocol server: one JSON-RPC 2.0 message per line on stdin and
     /// stdout, with stdout kept for the protocol alone and logs on stderr.
-    Mcp,
+    Mcp {
+        /// Work without a Cutless window: always edit through a private API
+        /// instead of connecting to the one open on screen.
+        #[arg(long)]
+        local: bool,
+    },
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -156,7 +161,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             height,
         } => preview(&input, &output, &effect, width, height),
         Command::Check { path } => check(&path),
-        Command::Mcp => mcp(),
+        Command::Mcp { local } => mcp(local),
     }
 }
 
@@ -202,9 +207,14 @@ fn emit(message: &Message) {
 
 /// The MCP transport: the Cutless tool registry served to an agent as a
 /// stdio Model Context Protocol server, until stdin ends. Everything the
-/// API raises on a job's thread goes to the log, never to stdout.
-fn mcp() -> Result<(), Box<dyn Error>> {
-    let mut server = cutless_mcp::McpServer::with_default_registry()?;
+/// API raises on a job's thread goes to the log, never to stdout. Unless
+/// `local` says otherwise, an open window that allows agents is used first.
+fn mcp(local: bool) -> Result<(), Box<dyn Error>> {
+    let mut server = if local {
+        cutless_mcp::McpServer::with_default_registry_local()?
+    } else {
+        cutless_mcp::McpServer::with_default_registry()?
+    };
     server.serve(std::io::stdin().lock(), std::io::stdout().lock())?;
     Ok(())
 }

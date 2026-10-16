@@ -47,6 +47,14 @@ pub(crate) fn register(registry: &mut Registry) {
     );
     support::add(
         registry,
+        "project_on_screen",
+        "Make a project that is already open in the Cutless window the current one, so edits go to what the person sees. Call this first when the server is connected to a window.",
+        json!({ "type": "object", "properties": {} }),
+        ToolClass::Read,
+        project_on_screen,
+    );
+    support::add(
+        registry,
         "project_save",
         "Write the current project document to disk.",
         json!({ "type": "object", "properties": {} }),
@@ -130,6 +138,13 @@ struct SettingsInput {
     fps: Option<f64>,
 }
 
+/// Проект, открытый в окне, как его называет ответ `project.onScreen`.
+#[derive(Deserialize)]
+struct OnScreen {
+    path: String,
+    name: String,
+}
+
 /// Вход `clip_detail`.
 #[derive(Deserialize)]
 struct ClipInput {
@@ -189,6 +204,46 @@ fn project_create(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput,
         ),
         data: json!({ "path": path, "name": view.settings.name }),
         ..ToolOutput::default()
+    })
+}
+
+/// Делает текущим проект, открытый в окне Cutless.
+fn project_on_screen(ctx: &mut ToolContext<'_>, _input: Value) -> Result<ToolOutput, ToolError> {
+    let value = ctx.call(concat_api::Request::ProjectOnScreen)?;
+    let projects: Vec<OnScreen> =
+        serde_json::from_value(value).map_err(|error| ToolError::Failed(error.to_string()))?;
+    Ok(match projects.as_slice() {
+        [] => ToolOutput::text(
+            "no project is open in a Cutless window; use project_open or project_create",
+        ),
+        [only] => {
+            ctx.project = Some(only.path.clone());
+            ToolOutput {
+                text: format!(
+                    "current project: {} at {} (open in the Cutless window)",
+                    only.name, only.path
+                ),
+                data: json!({ "path": only.path, "name": only.name }),
+                ..ToolOutput::default()
+            }
+        }
+        many => {
+            let list = many
+                .iter()
+                .map(|project| project.path.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            ToolOutput {
+                text: format!("projects open in the Cutless window:\n{list}"),
+                data: json!({
+                    "paths": many
+                        .iter()
+                        .map(|project| project.path.clone())
+                        .collect::<Vec<_>>()
+                }),
+                ..ToolOutput::default()
+            }
+        }
     })
 }
 
