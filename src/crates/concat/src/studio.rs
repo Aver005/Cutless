@@ -3688,6 +3688,7 @@ impl Studio {
                 duration: Some(f64::from(plan.duration)),
                 effect_id: plan.media.clone(),
                 name: plan.label.clone(),
+                params: Default::default(),
             })
         } else {
             self.place_file(vec![Placement::OnTrack {
@@ -3726,6 +3727,7 @@ impl Studio {
                 duration: Some(f64::from(plan.duration)),
                 effect_id: plan.media.clone(),
                 name: plan.label.clone(),
+                params: Default::default(),
             })
         } else {
             self.place_file(vec![Placement::AtFirstFree {

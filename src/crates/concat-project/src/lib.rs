@@ -4496,6 +4496,7 @@ mod tests {
                     duration: Some(1.0),
                     effect_id: "concat.warm".into(),
                     name: name.into(),
+                    params: Default::default(),
                 })
                 .expect("a layer");
         }

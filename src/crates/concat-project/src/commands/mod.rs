@@ -7,7 +7,7 @@
 //! meaning lives. The clamps and tolerances documented on each variant are
 //! the contract the window's gesture echo mirrors and tests against.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ mod audio;
 mod clips;
 pub mod links;
 pub use clips::{consolidation_clips, why_not_merge};
+pub mod keyspans;
 mod media;
 pub mod pauses;
 mod properties;
@@ -361,6 +362,10 @@ pub enum Command {
         effect_id: String,
         /// What the lane calls it.
         name: String,
+        /// Knobs set from the start, by manifest key; the rest stay at
+        /// their defaults. Lets a caller place a tuned layer in one step.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        params: BTreeMap<String, f64>,
     },
     /// Gives a clip a speed curve, or takes it away. The source covered is
     /// held constant, as a speed change does, so the clip's timeline length
@@ -781,6 +786,20 @@ pub enum Command {
         /// The pieces to confirm; None for all marked on the active timeline.
         clip_ids: Option<Vec<String>>,
     },
+    /// Cutless: replaces a target's keys inside `from..=to` with `keys`, as
+    /// given - no merging of near keys, so a key on every frame survives.
+    SetKeySpan {
+        /// The clip. An unknown id is a no-op.
+        clip_id: String,
+        /// A property of the clip, or a parameter of one link of its chain.
+        target: keyspans::KeyTarget,
+        /// Start of the span, a fraction of the clip.
+        from: f64,
+        /// End of the span, a fraction of the clip.
+        to: f64,
+        /// The keys the span holds afterwards; each is clamped into it.
+        keys: Vec<keyspans::SpanKey>,
+    },
 }
 
 /// What a command produced, beyond the new state: the ids it minted, so the
@@ -997,8 +1016,11 @@ impl Command {
                     })
             }
             Command::AddLayerClip {
-                start, duration, ..
-            } => bad([*start]) || bad(*duration),
+                start,
+                duration,
+                params,
+                ..
+            } => bad([*start]) || bad(*duration) || bad(params.values().copied()),
             Command::SetClipSpeedCurve { curve, .. } => bad(curve
                 .iter()
                 .flatten()
@@ -1010,6 +1032,12 @@ impl Command {
                 at, value, ease, ..
             } => bad([*at, *value]) || bad(ease.0),
             Command::ClearClipKey { at, .. } | Command::ClearEffectKey { at, .. } => bad([*at]),
+            Command::SetKeySpan { from, to, keys, .. } => {
+                bad([*from, *to])
+                    || keys
+                        .iter()
+                        .any(|key| bad([key.at, key.value]) || bad(key.ease.0))
+            }
             Command::SetClipCutout { cutout, .. } => cutout.as_ref().is_some_and(|cutout| {
                 bad([cutout.feather]) || cutout.strokes.iter().any(bad_stroke)
             }),
@@ -1167,5 +1195,6 @@ pub fn apply(
         | Command::SetClipPause { .. }
         | Command::RestorePauses { .. }
         | Command::ConfirmPauses { .. }) => pauses::apply(project, mint, command),
+        command @ Command::SetKeySpan { .. } => keyspans::apply(project, command),
     }
 }

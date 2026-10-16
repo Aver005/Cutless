@@ -151,6 +151,7 @@ pub(super) fn apply(
             duration,
             effect_id,
             name,
+            params,
         } => {
             let duration = duration
                 .unwrap_or(DEFAULT_LAYER_DURATION)
@@ -171,7 +172,9 @@ pub(super) fn apply(
             };
             let mut clip =
                 Clip::blank(id.clone(), track_id, ClipKind::Layer, name, start, duration);
-            clip.video_effects = vec![AppliedFilter::new(effect_id)];
+            let mut layer = AppliedFilter::new(effect_id);
+            layer.params = params;
+            clip.video_effects = vec![layer];
             timeline.clips.push(Arc::new(clip));
             Ok(Outcome {
                 created_id: Some(id),

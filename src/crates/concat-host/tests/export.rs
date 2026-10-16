@@ -1563,6 +1563,7 @@ fn every_edit_still_exports() {
             duration: Some(3.0),
             effect_id: "concat.glow".to_owned(),
             name: "Glow".to_owned(),
+            params: Default::default(),
         });
         let exported = studio.export("layer");
         exported.expect_length(end);
