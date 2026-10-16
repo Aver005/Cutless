@@ -99,6 +99,11 @@ pub struct Preferences {
     /// The destination picked in the introduction: "vertical", "youtube" or
     /// "edit". It picks the default shape of a new project and nothing else.
     pub goal: Option<String>,
+    /// A video file with several audio tracks goes on the timeline with one
+    /// sound clip per track, linked into a group, without asking: what the
+    /// question's "don't ask again" box turns on. Off by default, so the
+    /// question is asked until it is answered.
+    pub split_audio_quietly: bool,
 }
 
 impl Preferences {
@@ -389,6 +394,23 @@ mod tests {
         let older: Preferences = serde_json::from_str(r#"{"dark": true}"#).unwrap();
         assert!(!older.onboarding_done);
         assert_eq!(older.goal, None);
+    }
+
+    /// A file from before the quiet split existed reads as false, so the
+    /// question is asked; the flag round-trips under its own name.
+    #[test]
+    fn split_audio_quietly_round_trips_and_an_older_file_asks() {
+        assert!(!Preferences::default().split_audio_quietly);
+        let prefs = Preferences {
+            split_audio_quietly: true,
+            ..Preferences::default()
+        };
+        let text = serde_json::to_string(&prefs).unwrap();
+        assert!(text.contains("\"splitAudioQuietly\":true"), "{text}");
+        let back: Preferences = serde_json::from_str(&text).unwrap();
+        assert!(back.split_audio_quietly);
+        let older: Preferences = serde_json::from_str(r#"{"dark": true}"#).unwrap();
+        assert!(!older.split_audio_quietly);
     }
 
     /// A file from before the agents' switch existed reads as off, so

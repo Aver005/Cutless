@@ -1402,6 +1402,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     app.on_confirm_dismissed(on_window!(|state| {
         state.confirm = None;
     }));
+    app.on_confirm_check_toggled(on_window!(|state, checked: bool| {
+        state.confirm_check_toggled(checked);
+    }));
 
     app.on_relink_all(on_window!(|state| {
         state.handle(Msg::Relink(RelinkMsg::RelinkAll));

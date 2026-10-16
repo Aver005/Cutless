@@ -855,6 +855,7 @@ export component App inherits Window {
     in property <ConfirmData> confirm;
     callback confirm-accepted();
     callback confirm-dismissed();
+    callback confirm-check-toggled(checked: bool);
 
     ConfirmDialog {
         x: 0;
@@ -864,6 +865,7 @@ export component App inherits Window {
         data: root.confirm;
         confirmed => { root.confirm-accepted(); }
         dismissed => { root.confirm-dismissed(); }
+        check-toggled(checked) => { root.confirm-check-toggled(checked); }
     }
 
 

@@ -1941,6 +1941,44 @@ pub enum Confirm {
     RemoveTrack { track_id: String },
     /// Exporting over a file that is already at `path`.
     ReplaceExport { path: String },
+    /// A video file with several audio tracks: lay it down with a sound clip
+    /// per track, linked into a group, or leave it. `places` is what the ask
+    /// was about, kept so the answer can do it - one file from a drop or a
+    /// double click, or a whole selection from "add selected".
+    SplitAudio {
+        /// The most audio tracks any one file in `places` has, for the words.
+        tracks: usize,
+        /// The tick box beside "don't ask again", as bound back to the sheet.
+        checked: bool,
+        /// What to lay down where, whichever of the three ways in asked.
+        places: Vec<Placement>,
+    },
+}
+
+/// One clip waiting to be laid down from the bin, before the timeline has
+/// anywhere for it: the two ways a file goes on, as the ask needs to replay
+/// them. See `Studio::place_file`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Placement {
+    /// A drop named a lane and a moment.
+    OnTrack {
+        media_id: String,
+        track_id: String,
+        start: f64,
+    },
+    /// A click left it to the engine: the first lane free over its span.
+    AtFirstFree { media_id: String, start: f64 },
+}
+
+impl Placement {
+    /// The bin item this placement lays down.
+    fn media_id(&self) -> &str {
+        match self {
+            Placement::OnTrack { media_id, .. } | Placement::AtFirstFree { media_id, .. } => {
+                media_id
+            }
+        }
+    }
 }
 
 /// One clip on the clipboard: the clip as it was when copied, and the row
@@ -2321,7 +2359,26 @@ impl Studio {
                     crate::panes::export::ExportMsg::Overwrite,
                 ));
             }
+            Some(Confirm::SplitAudio {
+                checked, places, ..
+            }) => {
+                // A tick of "don't ask again" is remembered for the runs to
+                // come; it is the same fact `place_file` reads next time.
+                if checked {
+                    self.prefs.split_audio_quietly = true;
+                    self.prefs.save(&self.host.dirs);
+                }
+                self.place_and_split(&places);
+            }
             None => {}
+        }
+    }
+
+    /// The confirmation sheet's tick box: held on the question so the
+    /// republish that follows draws it back as the person left it.
+    pub fn confirm_check_toggled(&mut self, checked: bool) {
+        if let Some(Confirm::SplitAudio { checked: held, .. }) = self.confirm.as_mut() {
+            *held = checked;
         }
     }
 
@@ -2348,6 +2405,9 @@ impl Studio {
                     title: t("timeline.deleteTrackTitle").into(),
                     message: message.into(),
                     action: t("common.delete").into(),
+                    check_label: SharedString::new(),
+                    checked: false,
+                    danger: true,
                 }
             }
             Confirm::ReplaceExport { path } => crate::ui::ConfirmData {
@@ -2355,6 +2415,20 @@ impl Studio {
                 title: t("export.replaceFileTitle").into(),
                 message: tf("export.replaceFileMessage", &[path]).into(),
                 action: t("export.replace").into(),
+                check_label: SharedString::new(),
+                checked: false,
+                danger: true,
+            },
+            Confirm::SplitAudio {
+                tracks, checked, ..
+            } => crate::ui::ConfirmData {
+                open: true,
+                title: t("audioTracks.title").into(),
+                message: tf("audioTracks.message", &[tracks]).into(),
+                action: t("audioTracks.split").into(),
+                check_label: t("audioTracks.dontAsk").into(),
+                checked: *checked,
+                danger: false,
             },
         }
     }
@@ -3605,12 +3679,12 @@ impl Studio {
                 name: plan.label.clone(),
             })
         } else {
-            self.apply(Command::AddClip {
+            self.place_file(vec![Placement::OnTrack {
                 media_id: plan.media.clone(),
                 track_id,
                 start: f64::from(plan.start),
-                ripple: true,
-            })
+            }]);
+            return;
         };
         if let Some(id) = created {
             self.selection = vec![id];
@@ -3643,13 +3717,148 @@ impl Studio {
                 name: plan.label.clone(),
             })
         } else {
-            self.apply(Command::AddClipAtFirstFree {
+            self.place_file(vec![Placement::AtFirstFree {
                 media_id: plan.media.clone(),
                 start,
-            })
+            }]);
+            return;
         };
         if let Some(id) = created {
             self.selection = vec![id];
+        }
+    }
+
+    /// The selected bin media onto the timeline at `start`: the double
+    /// click's own route, shared with "add selected" so a whole selection
+    /// settles by the same rules.
+    pub fn place_media_at_playhead(
+        &mut self,
+        media_ids: impl IntoIterator<Item = String>,
+        start: f64,
+    ) {
+        let places = media_ids
+            .into_iter()
+            .map(|media_id| Placement::AtFirstFree { media_id, start })
+            .collect();
+        self.place_file(places);
+    }
+
+    /// Settles a batch of file placements: a video with several audio
+    /// tracks is split at once when the preference said not to ask, else
+    /// asked about in one sheet; every other file goes down as before. The
+    /// one place all three ways in agree on the question.
+    fn place_file(&mut self, places: Vec<Placement>) {
+        let mut plain = Vec::new();
+        let mut splitting = Vec::new();
+        for place in places {
+            match self.split_tracks(place.media_id()) {
+                Some(tracks) => splitting.push((place, tracks)),
+                None => plain.push(place),
+            }
+        }
+        self.place_plain(&plain);
+        if splitting.is_empty() {
+            return;
+        }
+        if self.prefs.split_audio_quietly {
+            let places: Vec<Placement> = splitting.into_iter().map(|(place, _)| place).collect();
+            self.place_and_split(&places);
+        } else {
+            let tracks = splitting
+                .iter()
+                .map(|(_, tracks)| *tracks)
+                .max()
+                .unwrap_or(0);
+            let places: Vec<Placement> = splitting.into_iter().map(|(place, _)| place).collect();
+            self.confirm = Some(Confirm::SplitAudio {
+                tracks,
+                checked: false,
+                places,
+            });
+        }
+    }
+
+    /// How many audio tracks a video file carries, when that is more than
+    /// one: the case the window asks about. Nothing for any other media, a
+    /// file with one track, or an older document that kept no track list.
+    fn split_tracks(&self, media_id: &str) -> Option<usize> {
+        self.project()
+            .media_by_id(media_id)
+            .filter(|media| media.kind == model::MediaKind::Video)
+            .map(|media| media.audio_tracks.len())
+            .filter(|count| *count > 1)
+    }
+
+    /// Lays placements down as they are, each its own undo step, and
+    /// selects what was made. This is what a file placement did before the
+    /// question existed.
+    fn place_plain(&mut self, places: &[Placement]) {
+        let mut created = Vec::new();
+        for place in places {
+            if let Some(id) = self.place_one(place, None) {
+                created.push(id);
+            }
+        }
+        if !created.is_empty() {
+            self.selection = created;
+        }
+    }
+
+    /// Lays each placement down and pulls its sound out into one clip per
+    /// track, the video and its sounds linked into a group - the whole lot
+    /// one undo step. The groups are left selected.
+    fn place_and_split(&mut self, places: &[Placement]) {
+        if places.is_empty() {
+            return;
+        }
+        // One gesture name folds the adds and the detaches into a step.
+        let gesture = "split-audio";
+        let mut videos = Vec::new();
+        for place in places {
+            if let Some(id) = self.place_one(place, Some(gesture)) {
+                self.apply_in(
+                    Some(gesture),
+                    Command::DetachAudioLinked {
+                        clip_id: id.clone(),
+                    },
+                );
+                videos.push(id);
+            }
+        }
+        if let Some(session) = self.session.as_mut() {
+            session.end_gesture();
+        }
+        if !videos.is_empty() {
+            let group = concat_project::commands::links::with_linked(self.timeline(), &videos);
+            self.selection = group;
+        }
+    }
+
+    /// Lays one placement down and says the new clip's id. `gesture` folds
+    /// it into an undo step with whatever else names it; `None` makes it a
+    /// step of its own.
+    fn place_one(&mut self, place: &Placement, gesture: Option<&str>) -> Option<String> {
+        match place {
+            Placement::OnTrack {
+                media_id,
+                track_id,
+                start,
+            } => self.apply_in(
+                gesture,
+                Command::AddClip {
+                    media_id: media_id.clone(),
+                    track_id: track_id.clone(),
+                    start: *start,
+                    ripple: true,
+                },
+            ),
+            Placement::AtFirstFree { media_id, start } => self.apply_in(
+                gesture,
+                Command::AddClipAtFirstFree {
+                    media_id: media_id.clone(),
+                    start: *start,
+                },
+            ),
         }
     }
 
