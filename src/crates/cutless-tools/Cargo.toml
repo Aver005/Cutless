@@ -1,0 +1,21 @@
+[package]
+name = "cutless-tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Cutless: the editor's actions as tools an agent can call, one registry for MCP and the built-in chat."
+
+[dependencies]
+concat-api.workspace = true
+concat-project.workspace = true
+concat-host.workspace = true
+concat-speech.workspace = true
+cutless-pauses = { path = "../cutless-pauses" }
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+log = "0.4"
+
+[lints]
+workspace = true

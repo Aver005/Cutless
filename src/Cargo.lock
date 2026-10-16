@@ -1616,6 +1616,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cutless-tools"
+version = "0.2.7"
+dependencies = [
+ "concat-api",
+ "concat-host",
+ "concat-project",
+ "concat-speech",
+ "cutless-pauses",
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "daachorse"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
