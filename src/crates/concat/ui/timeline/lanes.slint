@@ -132,9 +132,9 @@ component Clip inherits Rectangle {
     in property <length> edge-grab: 6px;
 
     /// A press landed: the caller resolves the selection before any drag.
-    callback pressed(additive: bool, edge: int);
+    callback pressed(additive: bool, alt: bool, edge: int);
     /// A press with the split tool: cut here, `x` into the clip.
-    callback split-at(x: length);
+    callback split-at(x: length, alt: bool);
     /// The volume line dragged to `gain` - linear, 1 being unity, 2 the
     /// top of the band - while the drag lasts.
     callback volume-dragged(gain: float);
@@ -603,7 +603,7 @@ component Clip inherits Rectangle {
                 // The split tool cuts where the press lands and starts no
                 // gesture: nothing is selected or moved by it.
                 if (root.tool == TimelineTool.split) {
-                    root.split-at(self.mouse-x);
+                    root.split-at(self.mouse-x, event.modifiers.alt);
                     return;
                 }
                 self.origin-x = self.absolute-position.x + self.mouse-x;
@@ -611,7 +611,7 @@ component Clip inherits Rectangle {
                 self.travelled = false;
                 self.on-edge = root.edge-at >= 0;
                 root.pressed(event.modifiers.shift || event.modifiers.control
-                    || event.modifiers.meta, root.edge-at);
+                    || event.modifiers.meta, event.modifiers.alt, root.edge-at);
             } else if (event.kind == PointerEventKind.up
                 || event.kind == PointerEventKind.cancel) {
                 // Only a release ends it. Slint delivers `move` here too, so a
@@ -799,7 +799,7 @@ component Clip inherits Rectangle {
             mouse-cursor: MouseCursor.pointer;
             pointer-event(event) => {
                 if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
-                    root.pressed(false, 2);
+                    root.pressed(false, event.modifiers.alt, 2);
                 } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
                     root.released();
                 }
@@ -871,7 +871,7 @@ component Clip inherits Rectangle {
                     self.origin-y = self.absolute-position.y + self.mouse-y;
                     self.is-dragging = true;
                     root.left-handle-drag = true;
-                    root.pressed(event.modifiers.shift || event.modifiers.control || event.modifiers.meta, 2);
+                    root.pressed(event.modifiers.shift || event.modifiers.control || event.modifiers.meta, event.modifiers.alt, 2);
                 } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
                     self.is-dragging = false;
                     root.left-handle-drag = false;
@@ -954,7 +954,7 @@ component Clip inherits Rectangle {
                     self.origin-y = self.absolute-position.y + self.mouse-y;
                     self.is-dragging = true;
                     root.right-handle-drag = true;
-                    root.pressed(event.modifiers.shift || event.modifiers.control || event.modifiers.meta, 2);
+                    root.pressed(event.modifiers.shift || event.modifiers.control || event.modifiers.meta, event.modifiers.alt, 2);
                 } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
                     self.is-dragging = false;
                     root.right-handle-drag = false;
@@ -1054,7 +1054,7 @@ component Clip inherits Rectangle {
                         self.origin-y = self.absolute-position.y + self.mouse-y;
                         self.is-dragging = true;
                         root.trans-btn-drag = true;
-                        root.pressed(event.modifiers.shift || event.modifiers.control || event.modifiers.meta, 2);
+                        root.pressed(event.modifiers.shift || event.modifiers.control || event.modifiers.meta, event.modifiers.alt, 2);
                     } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
                         self.is-dragging = false;
                         root.trans-btn-drag = false;
@@ -1149,9 +1149,9 @@ export component Lanes inherits Rectangle {
             hover-off-timer.running = true;
         }
     }
-    callback clip-pressed(id: string, additive: bool, edge: int);
+    callback clip-pressed(id: string, additive: bool, alt: bool, edge: int);
     /// The split tool pressed a clip: cut it at `seconds` on the timeline.
-    callback clip-split(id: string, seconds: float);
+    callback clip-split(id: string, seconds: float, alt: bool);
     /// A clip's volume line dragged to `gain`.
     callback clip-volume(id: string, gain: float);
     callback clip-dragged(seconds: float, pixels: length);
@@ -1497,15 +1497,15 @@ export component Lanes inherits Rectangle {
             // click near the lanes' edge scrolled the view and moved the
             // clip by the last drag's distance.
             // https://github.com/jub0t/Concat/issues/247
-            pressed(additive, edge) => {
+            pressed(additive, alt, edge) => {
                 root.press-scroll = root.scroll-left;
                 root.drag-seconds = 0;
                 root.drag-pixels = 0;
                 root.clip-dragging = false;
-                root.clip-pressed(entry.id, additive, edge);
+                root.clip-pressed(entry.id, additive, alt, edge);
             }
-            split-at(x) => {
-                root.clip-split(entry.id, entry.start + x / root.px-per-second);
+            split-at(x, alt) => {
+                root.clip-split(entry.id, entry.start + x / root.px-per-second, alt);
             }
             volume-dragged(gain) => { root.clip-volume(entry.id, gain); }
             // The clip reports its delta from the press; a view that has
