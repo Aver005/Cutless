@@ -1043,6 +1043,8 @@ export component PhoneEditor inherits Rectangle {
             selected: Editor.selected-clip;
             set(field, value) => { Editor.clip-set(field, value); }
             commit => { Editor.clip-commit(); }
+            hits: root.is-video;
+            hit(kind, strong) => { Editor.clip-hit(kind, strong); }
         }
 
         if root.sheet == "clip-audio": VerticalLayout {

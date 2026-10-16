@@ -1447,6 +1447,13 @@ fn clip_commands(id: &str, before: &Clip, after: &Clip) -> Vec<Command> {
             speed: after.speed,
         });
     }
+    // Cutless: a ramp picked from the speed list.
+    if after.speed_curve != before.speed_curve {
+        commands.push(Command::SetClipSpeedCurve {
+            clip_id: id.to_owned(),
+            curve: after.speed_curve.clone(),
+        });
+    }
     let mut patch = ClipPatch::default();
     if after.name != before.name {
         patch.name = Some(after.name.clone());
@@ -5200,9 +5207,16 @@ impl Studio {
                 }
                 ClipField::Speed => {
                     let speed = value.clamp(0.0625, 16.0);
+                    // Cutless: a rate set by hand is a constant rate, as the command makes it.
+                    clip.speed_curve = None;
                     clip.duration =
                         (clip.duration * clip.speed / speed).max(f64::from(MIN_DURATION));
                     clip.speed = speed;
+                }
+                ClipField::SpeedPreset => {
+                    if let Some(curve) = crate::ramps::curve_of(value.max(0.0) as usize) {
+                        clip.speed_curve = curve;
+                    }
                 }
                 ClipField::PreservePitch => clip.preserve_pitch = value != 0.0,
                 ClipField::FlipH => clip.flip_h = value != 0.0,
@@ -6903,6 +6917,32 @@ impl Studio {
             clip_id: id,
             cutout: Some(model::Cutout { subject, ..cutout }),
         });
+    }
+
+    /// Cutless: Salvo - a hit of `kind` on every selected clip under the
+    /// playhead, one undo step; see `crate::salvo`.
+    pub fn clip_hit(&mut self, kind: i32, strong: bool) {
+        // The inspector's pending echo first, so the hit lands on the clip as committed.
+        self.flush_commit();
+        let time = f64::from(self.playhead);
+        let (width, height) = self.output_size();
+        let frame = crate::salvo::Frame {
+            fps: 1.0 / self.frame_seconds(),
+            aspect: f64::from(width.max(1)) / f64::from(height.max(1)),
+        };
+        let commands: Vec<Command> = self
+            .selection
+            .iter()
+            .filter_map(|id| self.clip(id))
+            .filter(|clip| !self.locked(&clip.track_id))
+            .filter_map(|clip| crate::salvo::commands(clip, kind, strong, time, &frame))
+            .flatten()
+            .collect();
+        if commands.is_empty() {
+            self.notify(&t("studio.salvoMissed"), true);
+            return;
+        }
+        self.apply(Command::Batch { commands });
     }
 
     /// Takes every stroke off the selected clip's cutout, keeping it custom.
@@ -9646,6 +9686,7 @@ impl Studio {
                 .map_or(0, |item| item.audio_track_position(clip.audio_stream))
                 as i32,
             speed: clip.speed as f32,
+            speed_preset: crate::ramps::row_of(clip.speed_curve.as_deref()),
             preserve_pitch: clip.preserve_pitch,
             flip_h: clip.flip_h,
             flip_v: clip.flip_v,

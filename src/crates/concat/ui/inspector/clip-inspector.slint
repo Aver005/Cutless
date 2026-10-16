@@ -1745,9 +1745,9 @@ export component AudioPanel inherits VerticalLayout {
     }
 }
 
-/// Speed: the rate, and only the rate. Speed that changes over the clip is
-/// the keyframes' job; whether the sound's pitch follows the rate is the
-/// Audio tab's.
+/// Speed: the rate, and a ramp from Cutless's presets for speed that changes
+/// over the clip; whether the sound's pitch follows the rate is the Audio
+/// tab's.
 export component SpeedPanel inherits VerticalLayout {
     in property <SelectedClipData> selected;
     /// The panel's first section, with no hairline above it; false where
@@ -1756,11 +1756,42 @@ export component SpeedPanel inherits VerticalLayout {
 
     callback set(field: ClipField, value: float);
     callback commit();
+    /// Cutless: whether Salvo shows; a sound clip has nothing to hit.
+    in property <bool> hits: true;
+    /// Cutless: a hit of the chosen kind on the selected clips at the playhead.
+    callback hit(kind: int, strong: bool);
 
     property <float> speed;
     function seed() { root.speed = root.selected.speed; }
     init => { root.seed(); }
     changed selected => { root.seed(); }
+
+    // Cutless: the speed ramp presets, in the order cutless-motion lists
+    // them, between the steady rate and a curve of the clip's own.
+    property <[string]> ramps: [
+        I18n.t("clipInspector.rampConstant"),
+        I18n.t("clipInspector.rampVelocity"),
+        I18n.t("clipInspector.rampMontage"),
+        I18n.t("clipInspector.rampHero"),
+        I18n.t("clipInspector.rampBullet"),
+        I18n.t("clipInspector.rampJumpCut"),
+        I18n.t("clipInspector.rampFlashIn"),
+        I18n.t("clipInspector.rampFlashOut"),
+        I18n.t("clipInspector.rampToHit"),
+        I18n.t("clipInspector.rampCustom")
+    ];
+    // Cutless: the hit kinds, in the order cutless-motion lists them.
+    property <[string]> hit-kinds: [
+        I18n.t("clipInspector.hitPunch"),
+        I18n.t("clipInspector.hitShake"),
+        I18n.t("clipInspector.hitFlash"),
+        I18n.t("clipInspector.hitBw"),
+        I18n.t("clipInspector.hitRgb"),
+        I18n.t("clipInspector.hitGlow"),
+        I18n.t("clipInspector.hitBlur")
+    ];
+    property <int> hit-kind: 0;
+    property <bool> hit-strong: false;
 
     Section {
         first: root.first;
@@ -1792,6 +1823,54 @@ export component SpeedPanel inherits VerticalLayout {
                 fmt: ParamFormat.rate;
                 unit: "x";
                 changed(v) => { root.set(ClipField.speed, v); root.commit(); }
+            }
+
+            Row {
+                label: I18n.t("clipInspector.speedRamp");
+                Select {
+                    options: root.ramps;
+                    // The last row only names a curve of the clip's own; it is not a choice.
+                    disabled: [false, false, false, false, false, false, false, false, false, true];
+                    current: root.selected.speed-preset;
+                    changed(index) => { root.set(ClipField.speed-preset, index); root.commit(); }
+                }
+            }
+        }
+    }
+
+    // Cutless: Salvo - a hit at the playhead, the button behind the agent's hit_fx.
+    if root.hits: Section {
+        first: false;
+        salvo := SectionHeader {
+            title: I18n.t("clipInspector.salvo");
+            collapsible: true;
+            HelpButton {
+                text: I18n.t("clipInspector.salvoHelp");
+            }
+        }
+
+        if salvo.open: SectionBody {
+            Row {
+                label: I18n.t("clipInspector.salvoKind");
+                Select {
+                    options: root.hit-kinds;
+                    current: root.hit-kind;
+                    changed(index) => { root.hit-kind = index; }
+                }
+            }
+
+            SwitchRow {
+                label: I18n.t("clipInspector.salvoDrop");
+                checked: root.hit-strong;
+                toggled(on) => { root.hit-strong = on; }
+            }
+
+            Button {
+                label: I18n.t("clipInspector.salvoFire");
+                accessible-role: button;
+                accessible-label: I18n.t("clipInspector.salvoFire");
+                primary: true;
+                clicked => { root.hit(root.hit-kind, root.hit-strong); }
             }
         }
     }

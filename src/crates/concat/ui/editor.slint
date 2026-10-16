@@ -277,6 +277,8 @@ export global Editor {
     callback cutout-painting(on: bool);
     callback cutout-subject(index: int);
     callback cutout-clear();
+    /// Cutless: a hit of a kind on the selected clips at the playhead; see SpeedPanel.
+    callback clip-hit(kind: int, strong: bool);
     callback clip-enhance-set(on: bool);
     /// The transition riding into the selected clip; see VideoPanel.
     callback transition-remove();

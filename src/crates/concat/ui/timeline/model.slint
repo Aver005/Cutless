@@ -172,6 +172,8 @@ export enum TextAlignment { left, center, right }
 export enum ClipField {
     scale, offset-x, offset-y, rotation, stretch-x, stretch-y, opacity,
     volume, speed, preserve-pitch, fade-in, fade-out,
+    /// a row of the speed ramp list: 0 steady, then the presets
+    speed-preset,
     flip-h, flip-v, blend, crop-left, crop-top, crop-right, crop-bottom,
     font-size, font-weight, italic, text-opacity, align,
     stroke-width, shadow, line-height, tracking, text-width, text-height,
@@ -318,6 +320,9 @@ export struct SelectedClipData {
     /// with one track has
     audio-track: int,
     speed: float,
+    /// the row of the speed ramp list: 0 steady, then the presets in order,
+    /// and one past the last for a curve of the clip's own
+    speed-preset: int,
     preserve-pitch: bool,
     // the picture's edges and colour
     flip-h: bool,

@@ -204,6 +204,8 @@ export component ConfigPane inherits Rectangle {
     callback cutout-painting(on: bool);
     callback cutout-subject(index: int);
     callback cutout-clear();
+    /// Cutless: Salvo under the speed, a hit at the playhead.
+    callback clip-hit(kind: int, strong: bool);
     /// The Enhance switch: start it, or show the copy or the original.
     callback clip-enhance-set(on: bool);
     callback transition-remove();
@@ -642,6 +644,7 @@ export component ConfigPane inherits Rectangle {
                         selected: root.selected;
                         set(field, value) => { root.clip-set(field, value); }
                         commit => { root.clip-commit(); }
+                        hit(kind, strong) => { root.clip-hit(kind, strong); }
                     }
                 }
 
@@ -692,6 +695,7 @@ export component ConfigPane inherits Rectangle {
                     // rides the picture's, set under Video › Basic.
                     if root.is-audio: SpeedPanel {
                         first: false;
+                        hits: false;
                         selected: root.selected;
                         set(field, value) => { root.clip-set(field, value); }
                         commit => { root.clip-commit(); }

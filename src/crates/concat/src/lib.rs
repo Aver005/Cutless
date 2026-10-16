@@ -50,6 +50,8 @@ pub use platform::{ExportPublisher, FilePicker, install_export_publisher, instal
 mod panes;
 mod prefs;
 mod presets;
+mod ramps;
+mod salvo;
 mod ships;
 mod source;
 mod studio;
@@ -1287,6 +1289,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     editor.on_cutout_clear(on_window!(|state| {
         state.cutout_clear();
+    }));
+    editor.on_clip_hit(on_window!(|state, kind: i32, strong: bool| {
+        state.clip_hit(kind, strong);
     }));
     editor.on_clip_enhance_set(on_window!(|state, on: bool| {
         state.clip_enhance_set(on);
