@@ -76,7 +76,7 @@
 
 ### Что уже есть (2026-10-16)
 
-36 инструментов в `src/crates/cutless-tools` (`default_registry()`), имена и поля входа — snake_case:
+38 инструментов в `src/crates/cutless-tools` (`default_registry()`), имена и поля входа — snake_case:
 
 | Группа | Инструменты |
 |---|---|
@@ -88,6 +88,15 @@
 | Глаза и выход | `frame_at`, `export_start` |
 | Речь | `speech_models`, `transcribe`, `transcript_get`, `transcript_search`, `captions_make` |
 | Паузы и звук | `pauses_analyze`, `pauses_mark`, `pauses_list`, `pauses_restore`, `pauses_confirm`, `audio_clean` |
+| Задачи | `job_status`, `job_cancel` |
+
+**Долгие задачи** (`cutless-tools/src/jobs.rs`, доска `Jobs` в `ToolContext`). `transcribe` и `export_start` — фоновые
+задачи: инструмент ждёт до `wait_seconds` (по умолчанию 20 с, не больше 45) и отвечает итогом или id задачи
+(`t1` — распознавание, `j1` — экспорт от API). `job_status` ждёт столько же и отдаёт итог. `transcript_get`,
+`transcript_search`, `captions_make` без готовой расшифровки сами запускают её и ждут, иначе — ошибка `Pending` с id.
+Распознаватель один: вторая расшифровка не стартует, пока идёт первая. События экспорта идут на доску через
+`Jobs::sink` (своё API) или поток чтения сокета окна. При закрытии сессии расшифровка отменяется, экспорт дописывается.
+Предел 45 с — из-за клиентов: pooprusteek рвёт любой запрос MCP через 60 с (`LEARNINGS.md`).
 
 Сквозная проверка — `scripts/cutless/mcp-smoke.py --speech речь.wav` (нужен `concat-cli` профиля quick).
 
@@ -157,6 +166,8 @@ lint: 1 warning — c7 text 24 chars/2.8s = 8.6 cps ok; c2 outside safe zone? no
 - Включение — «Агенты могут править открытый проект» (Настройки › Remote), поднимает сервер на loopback с токеном.
 - `concat-cli mcp` читает `settings.json` окна; если сервер и агенты включены — работает через сокет
   (`cutless-mcp/src/remote.rs`), иначе своим `Api`. `--local` — всегда своим. Первый вызов агента — `project_on_screen`.
+- `RemoteEditor` читает сокет окна отдельным потоком: ответы — ожидающему вызову, события задач — на доску `Jobs`.
+  Без этого очередь окна (256 строк) переполнялась событиями экспорта, и окно переставало слать события клиенту.
 - Ограничения: MCP ищет окно один раз при старте; `project.setVideo` для проекта окна отклоняется.
 
 Исходный проект:

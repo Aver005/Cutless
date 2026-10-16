@@ -8,6 +8,7 @@
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CLI = ROOT / "src" / "target" / "quick" / "concat-cli.exe"
+# Подсказка инструмента: работа идёт фоновой задачей, её ждут через job_status.
+JOB = re.compile(r'job_status with job_id "([^"]+)"')
 
 
 class Mcp:
@@ -79,6 +82,15 @@ def step(title: str, text: str) -> None:
     print(f"\n=== {title}\n{text.strip()[:1200]}")
 
 
+def finish(mcp: Mcp, title: str, text: str) -> str:
+    """Печатает ответ и, пока он говорит о фоновой задаче, ждёт её через job_status."""
+    step(title, text)
+    while found := JOB.search(text):
+        text = mcp.tool("job_status", job_id=found.group(1), wait_seconds=45)
+        step("job_status", text)
+    return text
+
+
 def run(cli: Path, work: Path, speech: Path) -> None:
     video = make_video(work, speech)
     mcp = Mcp(cli)
@@ -101,7 +113,7 @@ def run(cli: Path, work: Path, speech: Path) -> None:
         clip_id = next(word for word in summary.split() if word.startswith("c") and word[1:].isdigit())
 
         step("speech_models", mcp.tool("speech_models"))
-        step("transcribe", mcp.tool("transcribe", clip_id=clip_id, language="ru"))
+        finish(mcp, "transcribe", mcp.tool("transcribe", clip_id=clip_id, language="ru"))
         step("transcript_search", mcp.tool("transcript_search", query="фронтальную камеру"))
         step("captions_make", mcp.tool("captions_make", clip_id=clip_id))
 
@@ -113,6 +125,7 @@ def run(cli: Path, work: Path, speech: Path) -> None:
         step("timeline_summary (итог)", mcp.tool("timeline_summary"))
         step("undo", mcp.tool("undo"))
         step("project_save", mcp.tool("project_save"))
+        finish(mcp, "export_start", mcp.tool("export_start", output=str(work / "agent.mp4")))
     finally:
         mcp.close()
 

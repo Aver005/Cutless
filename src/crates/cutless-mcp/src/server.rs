@@ -7,7 +7,7 @@
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 
-use cutless_tools::{Editor, Registry, ToolContext, ToolError, ToolOutput};
+use cutless_tools::{Editor, Jobs, Registry, ToolContext, ToolError, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::protocol::{self, Call, RpcError};
@@ -34,6 +34,8 @@ pub struct McpServer {
     editor: Box<dyn Editor + Send>,
     /// Папка открытого проекта; её ставит `project_open`/`project_create`.
     project: Option<String>,
+    /// Фоновые задачи сессии: распознавание, экспорт.
+    jobs: Jobs,
     /// Версия протокола, согласованная в `initialize`.
     protocol_version: String,
 }
@@ -53,16 +55,18 @@ impl McpServer {
     /// Выбирает редактора: окно Cutless, если оно есть и `local` не запрещает,
     /// иначе свою сессию API. Что выбрано — пишем в лог.
     fn select_editor(local: bool) -> Result<McpServer, McpError> {
+        let jobs = Jobs::default();
         if !local
             && let Ok(dirs) = concat_api::AppDirs::locate()
             && let Some((address, token)) = window_endpoint(&dirs.config)
         {
-            match RemoteEditor::connect(address, &token) {
+            match RemoteEditor::connect(address, &token, jobs.clone()) {
                 Ok(editor) => {
                     log::info!(target: "cutless_mcp", "работаем через окно Cutless на {address}");
-                    return Ok(McpServer::with_editor(
+                    return Ok(McpServer::with_parts(
                         cutless_tools::default_registry(),
                         Box::new(editor),
+                        jobs,
                     ));
                 }
                 Err(error) => {
@@ -73,23 +77,33 @@ impl McpServer {
                 }
             }
         }
-        let events: concat_api::EventSink = Arc::new(|event| {
+        let record = jobs.sink();
+        let events: concat_api::EventSink = Arc::new(move |event| {
             log::info!(target: "cutless_mcp", "событие API: {event:?}");
+            record(event);
         });
         let api = concat_api::Api::new(events).map_err(McpError::Dirs)?;
         log::info!(target: "cutless_mcp", "работаем со своим API, без окна");
-        Ok(McpServer::with_editor(
+        Ok(McpServer::with_parts(
             cutless_tools::default_registry(),
             Box::new(api),
+            jobs,
         ))
     }
 
     /// Сервер над готовым редактором: окно, своя сессия или тест.
     pub fn with_editor(registry: Registry, editor: Box<dyn Editor + Send>) -> McpServer {
+        McpServer::with_parts(registry, editor, Jobs::default())
+    }
+
+    /// Сервер над редактором, чьи события уже идут на доску `jobs`
+    /// (её [`Jobs::sink`] стоит в API или сокете редактора).
+    pub fn with_parts(registry: Registry, editor: Box<dyn Editor + Send>, jobs: Jobs) -> McpServer {
         McpServer {
             registry,
             editor,
             project: None,
+            jobs,
             protocol_version: protocol::DEFAULT_PROTOCOL_VERSION.to_owned(),
         }
     }
@@ -129,7 +143,8 @@ impl McpServer {
                 output.flush()?;
             }
         }
-        // Экспорт, начатый последней строкой, дописывается до выхода.
+        // Расшифровку больше некому читать — останавливаем; экспорт дописывается до выхода.
+        self.jobs.shutdown();
         self.editor.finish();
         Ok(())
     }
@@ -193,6 +208,7 @@ impl McpServer {
         let mut ctx = ToolContext {
             editor: self.editor.as_mut(),
             project: self.project.clone(),
+            jobs: self.jobs.clone(),
         };
         let outcome = self.registry.call(&mut ctx, name, arguments);
         // Инструмент мог открыть или закрыть проект: запоминаем.

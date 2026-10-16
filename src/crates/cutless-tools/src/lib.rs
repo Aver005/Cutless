@@ -8,8 +8,11 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 pub mod edit;
+pub mod jobs;
 pub mod pauses;
 pub mod speech;
+
+pub use jobs::Jobs;
 
 /// Куда уходят запросы редактору: сейчас API без окна, на этапе моста — открытое окно.
 pub trait Editor {
@@ -109,6 +112,9 @@ pub enum ToolError {
     /// Редактор отказал; текст его ошибки.
     #[error("{0}")]
     Editor(String),
+    /// Нужная работа ещё идёт фоновой задачей; текст говорит, как её дождаться.
+    #[error("{0}")]
+    Pending(String),
     /// Другая ошибка выполнения.
     #[error("{0}")]
     Failed(String),
@@ -120,6 +126,8 @@ pub struct ToolContext<'a> {
     pub editor: &'a mut dyn Editor,
     /// Папка открытого проекта; инструменты, которым нужен проект, берут её отсюда.
     pub project: Option<String>,
+    /// Фоновые задачи сессии: распознавание, экспорт.
+    pub jobs: Jobs,
 }
 
 impl ToolContext<'_> {
@@ -193,6 +201,7 @@ impl Registry {
 pub fn default_registry() -> Registry {
     let mut registry = Registry::default();
     edit::register(&mut registry);
+    jobs::register(&mut registry);
     speech::register(&mut registry);
     pauses::register(&mut registry);
     registry

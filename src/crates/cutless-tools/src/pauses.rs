@@ -432,6 +432,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: fake,
             project: Some(PATH.to_owned()),
+            jobs: crate::Jobs::default(),
         };
         run(&mut ctx)
     }

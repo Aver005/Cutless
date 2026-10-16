@@ -16,7 +16,7 @@ pub const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
 pub const SERVER_NAME: &str = "cutless";
 
 /// Подсказка модели: с чего начать, чем смотреть и что правки откатываются.
-pub const INSTRUCTIONS: &str = "Open a project before editing: project_open takes a folder that already holds one, or project_create takes a location and a name. When the server is connected to an open Cutless window, call project_on_screen first: it makes the project already on screen the current one. Call timeline_summary to see tracks, clips and ids before you change anything. Every edit is one undo step, and undo rolls the last change back. Times are seconds everywhere.";
+pub const INSTRUCTIONS: &str = "Open a project before editing: project_open takes a folder that already holds one, or project_create takes a location and a name. When the server is connected to an open Cutless window, call project_on_screen first: it makes the project already on screen the current one. Call timeline_summary to see tracks, clips and ids before you change anything. Every edit is one undo step, and undo rolls the last change back. Times are seconds everywhere. Long work runs as a background job: transcribe and export_start answer with a job id when they cannot finish at once, and job_status waits for the job (up to 45 s a call) and returns its result.";
 
 /// Одно входящее сообщение: id, метод и параметры.
 #[derive(Clone, Debug, PartialEq)]

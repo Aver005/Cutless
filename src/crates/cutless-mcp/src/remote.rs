@@ -5,10 +5,13 @@
 //! оно правит проект на экране. Формат строки — JSON-RPC 2.0 с `auth`.
 
 use std::io::{BufRead, BufReader, Write};
-use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::net::{Shutdown, SocketAddr, TcpStream};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
-use concat_api::{ApiError, ErrorCode, Request};
+use concat_api::{ApiError, ErrorCode, Event, Request};
+use cutless_tools::Jobs;
 use serde_json::{Value, json};
 
 use crate::McpError;
@@ -24,29 +27,34 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Редактор, который правит проект через открытое окно Cutless.
 pub struct RemoteEditor {
-    reader: BufReader<TcpStream>,
     writer: TcpStream,
+    /// Ответы окна; события поток чтения сам кладёт на доску задач.
+    replies: Receiver<Value>,
+    /// Читает сокет всё время: иначе очередь окна переполнится событиями экспорта.
+    reader: Option<JoinHandle<()>>,
     /// id следующего запроса; ответ ищется по нему.
     next_id: u64,
 }
 
 impl RemoteEditor {
-    /// Подключается к окну по адресу, представляя токен. Ошибка — если
-    /// окно недоступно или не приняло токен.
-    pub fn connect(address: SocketAddr, token: &str) -> Result<RemoteEditor, McpError> {
+    /// Подключается к окну по адресу, представляя токен. События задач окна
+    /// идут на доску `jobs`. Ошибка — если окно недоступно или не приняло токен.
+    pub fn connect(address: SocketAddr, token: &str, jobs: Jobs) -> Result<RemoteEditor, McpError> {
         let stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT)
             .map_err(|error| McpError::Connect(error.to_string()))?;
         let _ = stream.set_nodelay(true);
-        // На рукопожатие — тот же таймаут, чтобы молчащее окно не держало нас.
-        let _ = stream.set_read_timeout(Some(CONNECT_TIMEOUT));
-        let reader = BufReader::new(
-            stream
-                .try_clone()
-                .map_err(|error| McpError::Connect(error.to_string()))?,
-        );
+        let reading = stream
+            .try_clone()
+            .map_err(|error| McpError::Connect(error.to_string()))?;
+        let (replied, replies) = mpsc::channel();
+        let reader = std::thread::Builder::new()
+            .name("cutless window reader".to_owned())
+            .spawn(move || read_lines(reading, &replied, &jobs))
+            .map_err(|error| McpError::Connect(error.to_string()))?;
         let mut editor = RemoteEditor {
-            reader,
             writer: stream,
+            replies,
+            reader: Some(reader),
             next_id: 1,
         };
         let id = editor.mint();
@@ -57,10 +65,10 @@ impl RemoteEditor {
             "params": { "token": token },
         })
         .to_string();
+        // На рукопожатие — короткий срок, чтобы молчащее окно не держало нас.
         editor
-            .exchange(&line, id)
+            .exchange(&line, id, CONNECT_TIMEOUT)
             .map_err(|error| McpError::Connect(error.to_string()))?;
-        let _ = editor.writer.set_read_timeout(Some(REPLY_TIMEOUT));
         Ok(editor)
     }
 
@@ -79,7 +87,7 @@ impl RemoteEditor {
             json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }).to_string();
         let mut busy = None;
         for _ in 0..=BUSY_RETRIES {
-            match self.exchange(&line, id) {
+            match self.exchange(&line, id, REPLY_TIMEOUT) {
                 Ok(value) => return Ok(value),
                 Err(error) if error.code == ErrorCode::Busy => {
                     busy = Some(error);
@@ -92,38 +100,39 @@ impl RemoteEditor {
             .unwrap_or_else(|| ApiError::new(ErrorCode::Busy, "the Cutless window stayed busy")))
     }
 
-    /// Шлёт одну строку и читает ответ с этим id, пропуская события.
-    fn exchange(&mut self, line: &str, id: u64) -> Result<Value, ApiError> {
+    /// Шлёт одну строку и ждёт ответ с этим id не дольше `timeout`.
+    fn exchange(&mut self, line: &str, id: u64, timeout: Duration) -> Result<Value, ApiError> {
         self.writer
             .write_all(line.as_bytes())
             .and_then(|()| self.writer.write_all(b"\n"))
             .and_then(|()| self.writer.flush())
             .map_err(|_error| closed())?;
+        let deadline = Instant::now() + timeout;
         loop {
-            let line = self.read_line()?;
-            if line.trim().is_empty() {
-                continue;
-            }
-            let Ok(value) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
-            match value.get("id") {
-                // Строка-событие: у уведомления нет id, его пропускаем.
-                None => continue,
-                // Наш ответ.
-                Some(found) if found.as_u64() == Some(id) => return outcome(value),
-                // Чужой id — не наш ответ, ждём дальше.
-                Some(_) => continue,
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.replies.recv_timeout(left) {
+                Ok(value) if value.get("id").and_then(Value::as_u64) == Some(id) => {
+                    return outcome(value);
+                }
+                // Запоздалый ответ на запрос, которого мы уже не ждём.
+                Ok(_) => continue,
+                Err(RecvTimeoutError::Timeout) => {
+                    return Err(ApiError::failed(
+                        "the Cutless window did not answer in time",
+                    ));
+                }
+                Err(RecvTimeoutError::Disconnected) => return Err(closed()),
             }
         }
     }
+}
 
-    /// Одна строка; конец потока — окно закрылось.
-    fn read_line(&mut self) -> Result<String, ApiError> {
-        let mut line = String::new();
-        match self.reader.read_line(&mut line) {
-            Ok(0) | Err(_) => Err(closed()),
-            Ok(_) => Ok(line),
+impl Drop for RemoteEditor {
+    fn drop(&mut self) {
+        // Закрытый сокет будит поток чтения, и он выходит.
+        let _ = self.writer.shutdown(Shutdown::Both);
+        if let Some(reader) = self.reader.take() {
+            let _ = reader.join();
         }
     }
 }
@@ -132,6 +141,31 @@ impl cutless_tools::Editor for RemoteEditor {
     fn dispatch(&mut self, request: Request) -> Result<Value, ApiError> {
         self.dispatch_inner(request)
     }
+}
+
+/// Поток чтения: строки с id — ответы, без id — события задач окна.
+fn read_lines(stream: TcpStream, replies: &Sender<Value>, jobs: &Jobs) {
+    for line in BufReader::new(stream).lines() {
+        let Ok(line) = line else { break };
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if value.get("id").is_some() {
+            if replies.send(value).is_err() {
+                break;
+            }
+        } else if let Some(event) = event_from(&value) {
+            jobs.record(&event);
+        }
+    }
+}
+
+/// Событие из уведомления окна: метод — его имя, `params` — поля.
+fn event_from(value: &Value) -> Option<Event> {
+    let method = value.get("method")?.as_str()?;
+    let mut fields = value.get("params")?.as_object()?.clone();
+    fields.insert("event".to_owned(), Value::String(method.to_owned()));
+    serde_json::from_value(Value::Object(fields)).ok()
 }
 
 /// Метод запроса и его поля как `params`.
@@ -231,7 +265,8 @@ mod tests {
                 reply(request, json!({ "path": "/p" }))
             }
         });
-        let mut editor = RemoteEditor::connect(address, "secret").expect("connect");
+        let mut editor =
+            RemoteEditor::connect(address, "secret", Jobs::default()).expect("connect");
         let value = editor
             .dispatch(Request::ProjectGet { path: "/p".into() })
             .expect("call");
@@ -244,7 +279,7 @@ mod tests {
     fn a_refused_auth_is_a_connect_error() {
         let (address, handle) =
             spawn(|request| refuse(request, -32006, "unauthorized", "wrong token"));
-        assert!(RemoteEditor::connect(address, "nope").is_err());
+        assert!(RemoteEditor::connect(address, "nope", Jobs::default()).is_err());
         handle.join().expect("server");
     }
 
@@ -264,7 +299,7 @@ mod tests {
             }));
             lines
         });
-        let mut editor = RemoteEditor::connect(address, "t").expect("connect");
+        let mut editor = RemoteEditor::connect(address, "t", Jobs::default()).expect("connect");
         let value = editor
             .dispatch(Request::EditUndo { path: "/p".into() })
             .expect("call");
@@ -282,7 +317,7 @@ mod tests {
             }
             refuse(request, -32001, "notOpen", "/p is not open")
         });
-        let mut editor = RemoteEditor::connect(address, "t").expect("connect");
+        let mut editor = RemoteEditor::connect(address, "t", Jobs::default()).expect("connect");
         let error = editor
             .dispatch(Request::EditUndo { path: "/p".into() })
             .expect_err("refused");
@@ -307,7 +342,7 @@ mod tests {
                 reply(request, json!({ "canUndo": false }))
             }
         });
-        let mut editor = RemoteEditor::connect(address, "t").expect("connect");
+        let mut editor = RemoteEditor::connect(address, "t", Jobs::default()).expect("connect");
         let value = editor
             .dispatch(Request::EditUndo { path: "/p".into() })
             .expect("retried");
@@ -327,12 +362,53 @@ mod tests {
                 Vec::new()
             }
         });
-        let mut editor = RemoteEditor::connect(address, "t").expect("connect");
+        let mut editor = RemoteEditor::connect(address, "t", Jobs::default()).expect("connect");
         let error = editor
             .dispatch(Request::EditUndo { path: "/p".into() })
             .expect_err("closed");
         assert!(error.message.contains("window closed"), "{}", error.message);
         // Сервер читает, пока клиент не отключится.
+        drop(editor);
+        handle.join().expect("server");
+    }
+
+    #[test]
+    fn job_events_reach_the_board_even_between_requests() {
+        let (address, handle) = spawn(|request| {
+            if request["method"] == "auth" {
+                return reply(request, json!({}));
+            }
+            // Ответ, а за ним события экспорта, которых никто не ждёт.
+            let mut lines = reply(request, json!({ "job": "j1" }));
+            for frame in 1..=300 {
+                lines.push(json!({
+                    "jsonrpc": "2.0",
+                    "method": "export.progress",
+                    "params": { "job": "j1", "path": "/p", "frame": frame, "total": 300, "stage": "video" },
+                }));
+            }
+            lines.push(json!({
+                "jsonrpc": "2.0",
+                "method": "export.done",
+                "params": { "job": "j1", "path": "/p", "output": "/out.mp4", "width": 1080, "height": 1920 },
+            }));
+            lines
+        });
+        let jobs = Jobs::default();
+        let mut editor = RemoteEditor::connect(address, "t", jobs.clone()).expect("connect");
+        editor
+            .dispatch(Request::Version)
+            .expect("the reply comes first");
+        // События идут уже после ответа: ждём, пока поток чтения их разберёт.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let job = loop {
+            match jobs.get("j1") {
+                Some(job) if !job.is_running() => break job,
+                _ if Instant::now() > deadline => panic!("no export.done on the board"),
+                _ => std::thread::sleep(Duration::from_millis(10)),
+            }
+        };
+        assert!(job.line().contains("wrote /out.mp4"), "{}", job.line());
         drop(editor);
         handle.join().expect("server");
     }

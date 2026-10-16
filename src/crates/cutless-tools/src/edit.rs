@@ -171,6 +171,7 @@ mod tests {
             let mut ctx = ToolContext {
                 editor: &mut api,
                 project: Some(root.to_string_lossy().into_owned()),
+                jobs: crate::Jobs::default(),
             };
             // project_create writes a folder, so it gets a real location.
             let input = if name == "project_create" {
@@ -196,6 +197,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         for (name, input) in [
             ("clip_trim", json!({ "clip_id": "c1", "delta": 0.5 })),
@@ -220,6 +222,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut mock,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         match registry.call(&mut ctx, "timeline_summary", json!({})) {
             Err(ToolError::NoProject) => {}
@@ -255,6 +258,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut mock,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         let output = registry
             .call(&mut ctx, "project_on_screen", json!({}))
@@ -278,6 +282,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut mock,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         let output = registry
             .call(&mut ctx, "project_on_screen", json!({}))
@@ -299,6 +304,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut mock,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         let output = registry
             .call(&mut ctx, "project_on_screen", json!({}))
@@ -318,6 +324,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut mock,
             project: Some("/p".to_owned()),
+            jobs: crate::Jobs::default(),
         };
         let _ = registry.call(
             &mut ctx,
@@ -354,6 +361,7 @@ mod tests {
             let mut ctx = ToolContext {
                 editor: &mut api,
                 project: None,
+                jobs: crate::Jobs::default(),
             };
 
             let created = registry()
@@ -421,6 +429,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         let reopened = registry()
             .call(&mut ctx, "project_open", json!({ "path": path }))
@@ -442,6 +451,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut mock,
             project: Some("/p".to_owned()),
+            jobs: crate::Jobs::default(),
         };
         assert!(matches!(
             registry.call(&mut ctx, "clips_move", json!({ "moves": [] })),
@@ -467,6 +477,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         tools
             .call(
@@ -544,6 +555,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         registry
             .call(
@@ -646,6 +658,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         registry
             .call(
@@ -728,6 +741,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         registry()
             .call(

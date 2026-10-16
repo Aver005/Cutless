@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::support;
+use crate::jobs::JobKind;
 use crate::{Registry, ToolClass, ToolContext, ToolError, ToolImage, ToolOutput};
 
 /// Регистрирует инструменты вывода.
@@ -29,7 +30,8 @@ pub(crate) fn register(registry: &mut Registry) {
     support::add(
         registry,
         "export_start",
-        "Render the active timeline to a file and return the job id. Progress arrives as events.",
+        "Render the active timeline to a file as a background job and return its id; \
+         job_status waits for the file and job_cancel stops it.",
         json!({
             "type": "object",
             "properties": { "output": { "type": "string" } },
@@ -104,8 +106,12 @@ fn export_start(ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, T
     })?;
     let started: concat_api::Started =
         serde_json::from_value(value).map_err(|error| ToolError::Failed(error.to_string()))?;
+    ctx.jobs.track(&started.job, JobKind::Export, &input.output);
     Ok(ToolOutput {
-        text: format!("export started: job {} -> {}", started.job, input.output),
+        text: format!(
+            "Export started as job {} -> {}. Call job_status with job_id \"{}\" to wait for the file.",
+            started.job, input.output, started.job
+        ),
         data: json!({ "job": started.job, "output": input.output }),
         ..ToolOutput::default()
     })

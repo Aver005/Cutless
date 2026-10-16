@@ -9,17 +9,19 @@ mod search;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use concat_host::AppDirs;
 use concat_project::Command;
 use concat_project::model::{Project, TextStyle};
-use concat_speech::Transcriber;
 use concat_speech::caption_lines::{LineRules, caption_lines};
 use concat_speech::catalog;
 use concat_speech::transcribe::{Segment, TranscribeRequest, Word};
+use concat_speech::{JobStage, Transcriber};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::jobs::{Job, JobKind, JobState, WAIT_MAX, wait_from};
 use crate::{Registry, Tool, ToolClass, ToolContext, ToolError, ToolOutput, ToolSpec};
 
 /// Куда по умолчанию садится титр по вертикали: нижняя треть.
@@ -99,6 +101,7 @@ fn same_window(entry: &CachedTranscript, media: &str, source_start: f64, window:
 }
 
 /// Клип, каким его видит расшифровка: медиа, окно и место на таймлайне.
+#[derive(Clone)]
 struct ClipRef {
     id: String,
     media_path: String,
@@ -226,21 +229,28 @@ struct TranscribeInput {
     model_id: Option<String>,
     #[serde(default)]
     language: Option<String>,
+    #[serde(default)]
+    wait_seconds: Option<f64>,
 }
 
 impl Tool for Transcribe {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "transcribe",
-            description: "Transcribe a clip's speech into timed segments on the timeline. \
-                          Synchronous and slow the first time; the result is cached for \
-                          transcript_get and captions_make.",
+            description: "Transcribe a clip's speech into timed segments on the timeline. Runs \
+                          as a background job: a short clip answers at once, a long one answers \
+                          with a job id to wait on with job_status. The result is cached for \
+                          transcript_get, transcript_search and captions_make.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "clip_id": { "type": "string", "description": "The clip whose sound to transcribe." },
                     "model_id": { "type": "string", "description": "Model id from speech_models; the first downloaded model when absent." },
-                    "language": { "type": "string", "description": "Language code like \"ru\"; auto-detect when absent." }
+                    "language": { "type": "string", "description": "Language code like \"ru\"; auto-detect when absent." },
+                    "wait_seconds": {
+                        "type": "number",
+                        "description": format!("How long to wait for the result before answering with the job id; 20 when absent, at most {WAIT_MAX}.")
+                    }
                 },
                 "required": ["clip_id"],
                 "additionalProperties": false
@@ -251,34 +261,47 @@ impl Tool for Transcribe {
 
     fn call(&self, ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
         let input: TranscribeInput = crate::input(input)?;
-        let entry = ensure_transcript(
+        let ready = transcript(
             &self.state,
             ctx,
             &input.clip_id,
             input.model_id.as_deref(),
             input.language.as_deref(),
+            wait_from(input.wait_seconds),
         )?;
-        let words: usize = entry
-            .segments
-            .iter()
-            .map(|segment| segment.words.len())
-            .sum();
-        let first = entry.segments.first().map_or(0.0, |segment| segment.start);
-        let last = entry.segments.last().map_or(0.0, |segment| segment.end);
-        let text = format!(
-            "Transcribed clip {}: {} segments, {} words, {:.3}s-{:.3}s (model {}).",
-            entry.clip_id,
-            entry.segments.len(),
-            words,
-            first,
-            last,
-            entry.model
-        );
-        Ok(ToolOutput {
-            text,
-            data: transcript_json(&entry, &entry.segments, false),
-            ..ToolOutput::default()
+        Ok(match ready {
+            Ready::Done(entry) => transcribed(&entry),
+            Ready::Running(job) => ToolOutput {
+                text: format!("Transcription is still running: {}", job.hint()),
+                data: job.data(),
+                ..ToolOutput::default()
+            },
         })
+    }
+}
+
+/// Ответ о готовой расшифровке: сколько сегментов и слов, от и до.
+fn transcribed(entry: &CachedTranscript) -> ToolOutput {
+    let words: usize = entry
+        .segments
+        .iter()
+        .map(|segment| segment.words.len())
+        .sum();
+    let first = entry.segments.first().map_or(0.0, |segment| segment.start);
+    let last = entry.segments.last().map_or(0.0, |segment| segment.end);
+    let text = format!(
+        "Transcribed clip {}: {} segments, {} words, {:.3}s-{:.3}s (model {}).",
+        entry.clip_id,
+        entry.segments.len(),
+        words,
+        first,
+        last,
+        entry.model
+    );
+    ToolOutput {
+        text,
+        data: transcript_json(entry, &entry.segments, false),
+        ..ToolOutput::default()
     }
 }
 
@@ -323,7 +346,7 @@ impl Tool for TranscriptGet {
 
     fn call(&self, ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
         let input: GetInput = crate::input(input)?;
-        let entry = ensure_transcript(&self.state, ctx, &input.clip_id, None, None)?;
+        let entry = ready_transcript(&self.state, ctx, &input.clip_id)?;
         let selected: Vec<Segment> = entry
             .segments
             .iter()
@@ -400,7 +423,7 @@ impl Tool for TranscriptSearch {
             return Err(ToolError::BadInput("query is empty".to_owned()));
         }
         let entries = match input.clip_id.as_deref() {
-            Some(clip_id) => vec![ensure_transcript(&self.state, ctx, clip_id, None, None)?],
+            Some(clip_id) => vec![ready_transcript(&self.state, ctx, clip_id)?],
             None => self.state.all(),
         };
         if entries.is_empty() {
@@ -536,7 +559,7 @@ impl Tool for CaptionsMake {
 
     fn call(&self, ctx: &mut ToolContext<'_>, input: Value) -> Result<ToolOutput, ToolError> {
         let input: CaptionsInput = crate::input(input)?;
-        let entry = ensure_transcript(&self.state, ctx, &input.clip_id, None, None)?;
+        let entry = ready_transcript(&self.state, ctx, &input.clip_id)?;
         if entry.segments.is_empty() {
             return Ok(ToolOutput::text(
                 "The clip has no transcribed speech to caption.",
@@ -679,14 +702,38 @@ fn rules_from(input: Option<RulesInput>) -> LineRules {
     rules
 }
 
-/// Расшифровка клипа: из кэша по модели и языку, иначе — распознать и запомнить.
-fn ensure_transcript(
-    state: &State,
+/// Расшифровка клипа: готова или ещё идёт фоновой задачей.
+enum Ready {
+    Done(CachedTranscript),
+    Running(Job),
+}
+
+/// Готовая расшифровка для инструментов, которым она нужна целиком.
+/// Если её нет, запускает распознавание и ждёт; не дождались — ошибка с id задачи.
+fn ready_transcript(
+    state: &Arc<State>,
+    ctx: &mut ToolContext<'_>,
+    clip_id: &str,
+) -> Result<CachedTranscript, ToolError> {
+    match transcript(state, ctx, clip_id, None, None, wait_from(None))? {
+        Ready::Done(entry) => Ok(entry),
+        Ready::Running(job) => Err(ToolError::Pending(format!(
+            "The transcript of clip {clip_id} is not ready yet: {} Then call this tool again.",
+            job.hint()
+        ))),
+    }
+}
+
+/// Расшифровка клипа: из кэша по модели и языку, из идущей задачи или новой задачей.
+/// Ждёт её не дольше `wait`.
+fn transcript(
+    state: &Arc<State>,
     ctx: &mut ToolContext<'_>,
     clip_id: &str,
     model_id: Option<&str>,
     language: Option<&str>,
-) -> Result<CachedTranscript, ToolError> {
+    wait: Duration,
+) -> Result<Ready, ToolError> {
     let project = load_project(ctx)?;
     let clip = find_clip(&project, clip_id)?;
 
@@ -696,35 +743,101 @@ fn ensure_transcript(
             Some(model) => cached.model == model && cached.language.as_deref() == language,
         };
         if reuse {
-            return Ok(cached);
+            return Ok(Ready::Done(cached));
         }
+    }
+
+    let id = match ctx.jobs.running_for(JobKind::Transcribe, &clip.id) {
+        Some(job) => job.id,
+        None => start_transcription(state, ctx, &clip, model_id, language)?,
+    };
+    let job = ctx
+        .jobs
+        .wait(&id, wait)
+        .ok_or_else(|| ToolError::Failed(format!("job {id} is gone")))?;
+    match job.state {
+        JobState::Running { .. } => Ok(Ready::Running(job)),
+        JobState::Failed(error) => Err(ToolError::Failed(error)),
+        JobState::Done(_) => state
+            .find(&clip.media_path, clip.source_start, clip.window)
+            .map(Ready::Done)
+            .ok_or_else(|| {
+                ToolError::Failed(format!("the transcript of clip {} is missing", clip.id))
+            }),
+    }
+}
+
+/// Запускает распознавание клипа задачей и отдаёт её id. Распознаватель один:
+/// пока идёт другая расшифровка, новая не начинается.
+fn start_transcription(
+    state: &Arc<State>,
+    ctx: &mut ToolContext<'_>,
+    clip: &ClipRef,
+    model_id: Option<&str>,
+    language: Option<&str>,
+) -> Result<String, ToolError> {
+    let other = ctx
+        .jobs
+        .list()
+        .into_iter()
+        .find(|job| job.kind == JobKind::Transcribe && job.is_running());
+    if let Some(job) = other {
+        return Err(ToolError::Pending(format!(
+            "Another transcription is running, one at a time: {}",
+            job.hint()
+        )));
     }
 
     let dirs = dirs(ctx)?;
     let model = resolve_model(&dirs, model_id)?;
+    let language = language.map(str::to_owned);
     let request = TranscribeRequest {
         path: clip.media_path.clone(),
         audio_stream: clip.audio_stream,
         source_start: clip.source_start,
         window: clip.window,
         model_id: model.clone(),
-        language: language.map(str::to_owned),
+        language: language.clone(),
     };
-    let segments = state
-        .transcriber
-        .transcribe(&dirs, &request, |_stage| {})
-        .map_err(ToolError::Failed)?;
-    let entry = CachedTranscript {
-        clip_id: clip.id,
-        media: clip.media_path,
-        source_start: clip.source_start,
-        window: clip.window,
-        model,
-        language: language.map(str::to_owned),
-        segments: onto_timeline(&segments, clip.start, clip.speed),
-    };
-    state.put(entry.clone())?;
-    Ok(entry)
+    let clip = clip.clone();
+    let worker = Arc::clone(state);
+    let stopper = Arc::clone(state);
+    ctx.jobs.spawn(
+        JobKind::Transcribe,
+        &clip.id.clone(),
+        move || stopper.transcriber.cancel(),
+        move |report| {
+            let report = report.clone();
+            let segments = worker
+                .transcriber
+                .transcribe(&dirs, &request, move |stage| {
+                    let (name, fraction) = stage_of(stage);
+                    report.stage(name, fraction);
+                })?;
+            let entry = CachedTranscript {
+                clip_id: clip.id,
+                media: clip.media_path,
+                source_start: clip.source_start,
+                window: clip.window,
+                model,
+                language,
+                segments: onto_timeline(&segments, clip.start, clip.speed),
+            };
+            worker
+                .put(entry.clone())
+                .map_err(|error| error.to_string())?;
+            Ok(transcribed(&entry))
+        },
+    )
+}
+
+/// Этап распознавания словами и доля сделанного.
+fn stage_of(stage: JobStage) -> (&'static str, f32) {
+    match stage {
+        JobStage::Reading => ("reading audio", 0.0),
+        JobStage::Loading => ("loading model", 0.0),
+        JobStage::Working { done, .. } => ("transcribing", done),
+    }
 }
 
 /// Смещает времена окна на таймлайн: `/ speed` и `+ start клипа`.
@@ -1031,6 +1144,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut editor,
             project: Some("/x".to_owned()),
+            jobs: crate::Jobs::default(),
         };
         let error = tool.call(&mut ctx, json!({})).expect_err("bad input");
         assert!(matches!(error, ToolError::BadInput(_)), "{error:?}");
@@ -1048,6 +1162,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut editor,
             project: Some("/x".to_owned()),
+            jobs: crate::Jobs::default(),
         };
         for error in [
             get.call(&mut ctx, json!({})).expect_err("bad input"),
@@ -1068,6 +1183,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: None,
+            jobs: crate::Jobs::default(),
         };
         let output = tool.call(&mut ctx, json!({})).expect("models");
         assert!(output.text.contains("tiny.en"), "{}", output.text);
@@ -1090,6 +1206,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: Some(path),
+            jobs: crate::Jobs::default(),
         };
         let output = tool
             .call(&mut ctx, json!({ "clip_id": clip_id, "words": true }))
@@ -1116,6 +1233,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: Some(path.clone()),
+            jobs: crate::Jobs::default(),
         };
         let output = tool
             .call(&mut ctx, json!({ "clip_id": clip_id }))
@@ -1157,6 +1275,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut api,
             project: Some(path),
+            jobs: crate::Jobs::default(),
         };
         let output = tool
             .call(&mut ctx, json!({ "query": "hello", "clip_id": clip_id }))
@@ -1164,6 +1283,97 @@ mod tests {
         let matches = output.data["matches"].as_array().expect("matches");
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0]["kind"], "exact");
+    }
+
+    /// Пока расшифровка идёт, transcribe отвечает id задачи, а transcript_get
+    /// дожидается её конца и читает результат.
+    #[test]
+    fn a_running_transcription_answers_with_its_job_then_its_result() {
+        let root = scratch("job");
+        let mut api = api(&root);
+        let (path, clip_id, clip) = project_with_clip(&mut api, &root, "Job");
+
+        let state = Arc::new(State::default());
+        let jobs = crate::Jobs::default();
+        let (go, gate) = std::sync::mpsc::channel::<()>();
+        let worker = Arc::clone(&state);
+        let entry = cached(&clip);
+        let id = jobs
+            .spawn(
+                JobKind::Transcribe,
+                &clip_id,
+                || {},
+                move |_| {
+                    gate.recv().map_err(|error| error.to_string())?;
+                    worker
+                        .put(entry.clone())
+                        .map_err(|error| error.to_string())?;
+                    Ok(transcribed(&entry))
+                },
+            )
+            .expect("started");
+
+        let mut ctx = ToolContext {
+            editor: &mut api,
+            project: Some(path),
+            jobs: jobs.clone(),
+        };
+        let running = Transcribe {
+            state: Arc::clone(&state),
+        }
+        .call(&mut ctx, json!({ "clip_id": clip_id, "wait_seconds": 0 }))
+        .expect("running");
+        assert!(running.text.contains("still running"), "{}", running.text);
+        assert!(running.text.contains(&id), "{}", running.text);
+
+        go.send(()).expect("go");
+        let output = TranscriptGet {
+            state: Arc::clone(&state),
+        }
+        .call(&mut ctx, json!({ "clip_id": clip_id }))
+        .expect("waited for the job");
+        assert_eq!(output.data["segments"][0]["text"], "Hello there.");
+        jobs.shutdown();
+    }
+
+    /// Распознаватель один: вторую расшифровку не начинают, пока идёт первая.
+    #[test]
+    fn a_second_transcription_waits_for_the_first() {
+        let root = scratch("second");
+        let mut api = api(&root);
+        let (path, clip_id, _clip) = project_with_clip(&mut api, &root, "Second");
+
+        let jobs = crate::Jobs::default();
+        let (go, gate) = std::sync::mpsc::channel::<()>();
+        jobs.spawn(
+            JobKind::Transcribe,
+            "another-clip",
+            || {},
+            move |_| {
+                gate.recv().map_err(|error| error.to_string())?;
+                Ok(ToolOutput::default())
+            },
+        )
+        .expect("started");
+
+        let mut ctx = ToolContext {
+            editor: &mut api,
+            project: Some(path),
+            jobs: jobs.clone(),
+        };
+        let error = Transcribe {
+            state: Arc::new(State::default()),
+        }
+        .call(&mut ctx, json!({ "clip_id": clip_id }))
+        .expect_err("one at a time");
+        assert!(matches!(error, ToolError::Pending(_)), "{error:?}");
+        assert!(
+            error.to_string().contains("Another transcription"),
+            "{error}"
+        );
+
+        go.send(()).expect("go");
+        jobs.shutdown();
     }
 
     /// Ответ без расшифровки подсказывает сначала позвать transcribe.
@@ -1177,6 +1387,7 @@ mod tests {
         let mut ctx = ToolContext {
             editor: &mut editor,
             project: Some("/x".to_owned()),
+            jobs: crate::Jobs::default(),
         };
         let error = tool
             .call(&mut ctx, json!({ "query": "hello" }))
