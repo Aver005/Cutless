@@ -76,16 +76,31 @@ impl Session {
     /// every timeline's own frame with it, and those win, because that is
     /// where an edited frame was saved.
     pub fn open(path: &str, settings: DocumentSettings) -> Result<Session, String> {
-        let editor = match projects::read_document(path) {
-            Ok(Some(document)) => match Editor::from_document(&document) {
+        // Unreadable or not JSON: a save cut short, a disk in trouble.
+        // The one thing open must not do is answer with an empty
+        // project, since the next save would replace what was edited.
+        let document = projects::read_document(path)?;
+        Session::from_document(path, settings, document.as_ref())
+    }
+
+    /// A session over a document already in hand rather than read from
+    /// `path`: what [`Session::open`] does once the file is read. None is
+    /// a folder with no document yet.
+    pub fn from_document(
+        path: &str,
+        settings: DocumentSettings,
+        document: Option<&serde_json::Value>,
+    ) -> Result<Session, String> {
+        let editor = match document {
+            Some(document) => match Editor::from_document(document) {
                 Some(editor) => editor,
                 // The settings-only manifest `create` writes: a project
                 // closed before its first edit reopens empty, it is not
                 // corrupt.
-                None if projects::is_settings_only(&document) => {
+                None if projects::is_settings_only(document) => {
                     Editor::with_video(settings.video())
                 }
-                None if concat_project::document_version(&document)
+                None if concat_project::document_version(document)
                     > concat_project::DOCUMENT_VERSION =>
                 {
                     return Err(format!(
@@ -97,11 +112,7 @@ impl Session {
                 }
             },
             // No document yet - a project created moments ago.
-            Ok(None) => Editor::with_video(settings.video()),
-            // Unreadable or not JSON: a save cut short, a disk in trouble.
-            // The one thing open must not do is answer with an empty
-            // project, since the next save would replace what was edited.
-            Err(error) => return Err(error),
+            None => Editor::with_video(settings.video()),
         };
         // A link to a retired effect opens as a link to the one that stands
         // in for it, its knobs carried over (`[[replaces]]`).

@@ -30,6 +30,7 @@
 
 pub mod message;
 pub mod rpc;
+pub mod window;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -54,6 +55,7 @@ pub use message::{
     API_VERSION, ApiError, Dirs, Done, ErrorCode, Event, ExportSpec, Fill, PackageInfo, ParamInfo,
     Picture, Reply, Request, Response, Started, VersionInfo, Written,
 };
+pub use window::WindowLink;
 
 /// The export sheet's middle quality, and what an export gets when the
 /// caller says nothing.
@@ -131,6 +133,17 @@ impl OpenProjects {
             .remove(&key);
     }
 
+    /// The folders `holder` has open, by canonical path.
+    pub fn held_by(&self, holder: Holder) -> Vec<String> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .filter(|(_, held)| **held == holder)
+            .map(|(path, _)| path.clone())
+            .collect()
+    }
+
     /// Who has `path` open, if anyone.
     pub fn holder(&self, path: &str) -> Option<Holder> {
         let key = key_of(path);
@@ -162,6 +175,8 @@ pub struct Api {
     jobs: Jobs,
     /// [`VersionInfo::capabilities`], in the order they were added.
     capabilities: Vec<String>,
+    /// Окно, через которое правится проект на экране (Cutless).
+    window: Option<Box<dyn WindowLink>>,
 }
 
 impl Api {
@@ -186,6 +201,7 @@ impl Api {
             jobs: Jobs::default(),
             dirs,
             capabilities: CAPABILITIES.iter().map(|name| (*name).to_owned()).collect(),
+            window: None,
         }
     }
 
@@ -296,6 +312,9 @@ impl Api {
 
     fn run(&mut self, request: Request) -> Result<Reply, ApiError> {
         let view = |view: EditorView| Ok(Reply::View(Box::new(view)));
+        if self.on_screen(&request) {
+            return self.through_window(request);
+        }
         match request {
             Request::Version => Ok(Reply::Version(self.version())),
             Request::ProjectCreate {
@@ -309,6 +328,7 @@ impl Api {
                 Ok(Reply::Done(Done {}))
             }
             Request::ProjectList => Ok(Reply::Projects(self.recents())),
+            Request::ProjectOnScreen => Ok(Reply::Projects(self.projects_on_screen())),
             Request::ProjectGet { path } => view(self.session(&path)?.view()),
             Request::ProjectDocument { path } => {
                 Ok(Reply::Document(self.session(&path)?.document()))
@@ -500,7 +520,15 @@ impl Api {
         path: &str,
         name: &str,
     ) -> Result<concat_host::templates::TemplateInfo, ApiError> {
-        let session = self.session(path)?;
+        self.template_of(self.session(path)?, name)
+    }
+
+    /// Шаблон из данной сессии: своей или снимка окна.
+    fn template_of(
+        &self,
+        session: &Session,
+        name: &str,
+    ) -> Result<concat_host::templates::TemplateInfo, ApiError> {
         templates::save(
             &self.dirs.config,
             &session.document(),
@@ -518,7 +546,16 @@ impl Api {
     /// painted here and rejoining the clip list as stills.
     pub fn export(&mut self, path: &str, spec: &ExportSpec) -> Result<Started, ApiError> {
         self.writable(&spec.output)?;
-        let session = self.session(path)?;
+        let prepared = self.prepare_export(self.session(path)?, spec)?;
+        self.start_export(prepared, spec)
+    }
+
+    /// Всё, что экспорту нужно от сессии: запрос рендера, маски и папка проекта.
+    fn prepare_export(
+        &self,
+        session: &Session,
+        spec: &ExportSpec,
+    ) -> Result<PreparedExport, ApiError> {
         if session.project().active().clips.is_empty() {
             return Err(ApiError::new(
                 ErrorCode::Refused,
@@ -585,7 +622,24 @@ impl Api {
         request.height = height;
         request.rate_num = rate_num;
         request.rate_den = rate_den;
+        Ok(PreparedExport {
+            request,
+            masks,
+            project_path,
+        })
+    }
 
+    /// Запускает подготовленный экспорт задачей в своём потоке.
+    fn start_export(
+        &mut self,
+        prepared: PreparedExport,
+        spec: &ExportSpec,
+    ) -> Result<Started, ApiError> {
+        let PreparedExport {
+            request,
+            masks,
+            project_path,
+        } = prepared;
         let slot = self
             .exporter
             .begin()
@@ -646,8 +700,19 @@ impl Api {
         output: &str,
         size: Option<(u32, u32)>,
     ) -> Result<Written, ApiError> {
+        self.frame_of(self.session(path)?, time, output, size)
+    }
+
+    /// Кадр данной сессии в файл.
+    fn frame_of(
+        &self,
+        session: &Session,
+        time: f64,
+        output: &str,
+        size: Option<(u32, u32)>,
+    ) -> Result<Written, ApiError> {
         self.writable(output)?;
-        let (width, height, pixels) = self.pixels(path, time, size)?;
+        let (width, height, pixels) = self.pixels(session, time, size)?;
         write_png(Path::new(output), width, height, &pixels)?;
         Ok(Written {
             path: output.to_owned(),
@@ -663,7 +728,17 @@ impl Api {
         time: f64,
         size: Option<(u32, u32)>,
     ) -> Result<Picture, ApiError> {
-        let (width, height, pixels) = self.pixels(path, time, size)?;
+        self.picture_of(self.session(path)?, time, size)
+    }
+
+    /// Кадр данной сессии в ответ.
+    fn picture_of(
+        &self,
+        session: &Session,
+        time: f64,
+        size: Option<(u32, u32)>,
+    ) -> Result<Picture, ApiError> {
+        let (width, height, pixels) = self.pixels(session, time, size)?;
         let mut png = Vec::new();
         encode_png(&mut png, width, height, &pixels)
             .map_err(|error| ApiError::failed(format!("could not encode the frame: {error}")))?;
@@ -676,12 +751,11 @@ impl Api {
 
     /// The composited RGBA frame at `time`.
     fn pixels(
-        &mut self,
-        path: &str,
+        &self,
+        session: &Session,
         time: f64,
         size: Option<(u32, u32)>,
     ) -> Result<(u32, u32, Vec<u8>), ApiError> {
-        let session = self.session(path)?;
         let settings = session.settings();
         let (width, height) = size.unwrap_or((settings.width, settings.height));
         let (width, height) = checked_size(width, height)?;
@@ -743,6 +817,13 @@ impl Jobs {
             let _ = thread.join();
         }
     }
+}
+
+/// Экспорт, собранный из сессии и ждущий своего потока.
+struct PreparedExport {
+    request: ExportRequest,
+    masks: Vec<(String, AnalyseRequest)>,
+    project_path: String,
 }
 
 /// An export in flight: everything its thread needs, owned.

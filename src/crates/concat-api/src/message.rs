@@ -88,6 +88,10 @@ pub enum Request {
     /// The projects this machine opened most recently, newest first.
     #[serde(rename = "project.list")]
     ProjectList,
+    /// The projects open in the window this API is embedded in and
+    /// linked to, which an agent edits on screen. Empty without a window.
+    #[serde(rename = "project.onScreen")]
+    ProjectOnScreen,
     /// The state of an open project.
     #[serde(rename = "project.get")]
     ProjectGet {
@@ -301,7 +305,7 @@ pub enum Reply {
     Version(VersionInfo),
     /// The project after a change, or as it stands.
     View(Box<EditorView>),
-    /// [`Request::ProjectList`].
+    /// [`Request::ProjectList`] and [`Request::ProjectOnScreen`].
     Projects(Vec<ProjectInfo>),
     /// [`Request::ProjectDocument`].
     Document(Value),
