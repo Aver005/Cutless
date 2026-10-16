@@ -22,6 +22,7 @@
 //! more than the adjacency.
 
 pub mod commands;
+pub mod cutless;
 pub mod doc;
 pub mod editor;
 pub mod model;
@@ -2379,6 +2380,131 @@ mod tests {
         let timeline = editor.project().active();
         assert_eq!(timeline.clips.len(), 1);
         assert_eq!(timeline.clip(&clip_id).expect("exists").muted, None);
+    }
+
+    /// Cutless: a two-track recording placed and detached as a group. The
+    /// video, its game and its microphone answer as one, a cut leaves two
+    /// groups side by side, the link survives the document, and Unlink
+    /// breaks a group up.
+    #[test]
+    fn a_linked_detach_groups_the_video_with_every_track() {
+        use crate::commands::links::{link_of, with_linked};
+
+        let mut editor = Editor::new();
+        let media_id = editor
+            .apply(two_track_media("/rec.mp4"))
+            .expect("adds")
+            .created_id
+            .expect("id");
+        let track_id = editor.project().active().tracks[0].id.clone();
+        let clip_id = editor
+            .apply(Command::AddClip {
+                media_id,
+                track_id,
+                start: 0.0,
+                ripple: false,
+            })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        editor
+            .apply(Command::DetachAudioLinked {
+                clip_id: clip_id.clone(),
+            })
+            .expect("detaches");
+
+        let timeline = editor.project().active();
+        assert_eq!(timeline.clips.len(), 3);
+        assert!(
+            timeline
+                .clips
+                .iter()
+                .all(|clip| link_of(clip) == Some(clip_id.as_str()))
+        );
+        assert_eq!(timeline.clip(&clip_id).expect("video").muted, Some(true));
+        assert_eq!(
+            with_linked(timeline, std::slice::from_ref(&clip_id)).len(),
+            3
+        );
+
+        // A cut through all three: heads keep the group, tails make a new one.
+        let all: Vec<String> = timeline.clips.iter().map(|clip| clip.id.clone()).collect();
+        editor
+            .apply(Command::SplitClips {
+                clip_ids: all,
+                time: 4.0,
+            })
+            .expect("splits");
+        let timeline = editor.project().active();
+        let heads = with_linked(timeline, std::slice::from_ref(&clip_id));
+        assert_eq!(heads.len(), 3, "the heads stay one group");
+        let tail = timeline
+            .clips
+            .iter()
+            .find(|clip| clip.start > 3.9 && clip.kind == ClipKind::Video)
+            .expect("video tail")
+            .id
+            .clone();
+        let tails = with_linked(timeline, std::slice::from_ref(&tail));
+        assert_eq!(tails.len(), 3, "the tails are a group of their own");
+        assert!(heads.iter().all(|id| !tails.contains(id)));
+
+        // The link is a Cutless field in `extra`, kept by the document.
+        let saved = crate::doc::to_document(&settings(), editor.project());
+        let loaded = crate::doc::from_document(&saved).expect("loads");
+        assert_eq!(
+            with_linked(loaded.active(), std::slice::from_ref(&clip_id)).len(),
+            3
+        );
+
+        editor
+            .apply(Command::Unlink {
+                clip_ids: vec![clip_id.clone()],
+            })
+            .expect("unlinks");
+        let timeline = editor.project().active();
+        assert_eq!(
+            with_linked(timeline, std::slice::from_ref(&clip_id)).len(),
+            1
+        );
+        assert_eq!(with_linked(timeline, std::slice::from_ref(&tail)).len(), 3);
+    }
+
+    /// Cutless: a reattach takes the sounds back and leaves no group of one.
+    #[test]
+    fn reattaching_a_linked_group_leaves_the_video_unlinked() {
+        use crate::commands::links::link_of;
+
+        let mut editor = Editor::new();
+        let media_id = editor
+            .apply(two_track_media("/rec.mp4"))
+            .expect("adds")
+            .created_id
+            .expect("id");
+        let track_id = editor.project().active().tracks[0].id.clone();
+        let clip_id = editor
+            .apply(Command::AddClip {
+                media_id,
+                track_id,
+                start: 0.0,
+                ripple: false,
+            })
+            .expect("adds")
+            .created_id
+            .expect("id");
+        editor
+            .apply(Command::DetachAudioLinked {
+                clip_id: clip_id.clone(),
+            })
+            .expect("detaches");
+        editor
+            .apply(Command::ReattachAudio {
+                clip_id: clip_id.clone(),
+            })
+            .expect("reattaches");
+        let timeline = editor.project().active();
+        assert_eq!(timeline.clips.len(), 1);
+        assert_eq!(link_of(timeline.clip(&clip_id).expect("video")), None);
     }
 
     /// A file with two audio tracks detaches as two sound clips, one per

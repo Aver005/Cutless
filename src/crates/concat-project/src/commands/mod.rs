@@ -20,6 +20,7 @@ use crate::model::{
 
 mod audio;
 mod clips;
+pub mod links;
 pub use clips::{consolidation_clips, why_not_merge};
 mod media;
 pub mod pauses;
@@ -637,6 +638,17 @@ pub enum Command {
         /// The video clip - or its detached sound.
         clip_id: String,
     },
+    /// Cutless: [`Command::DetachAudio`] that also links the video and its
+    /// sounds into a group, which moves, cuts and deletes as one.
+    DetachAudioLinked {
+        /// The video clip to detach from.
+        clip_id: String,
+    },
+    /// Cutless: breaks up every group the named clips belong to.
+    Unlink {
+        /// Any member of each group to break up.
+        clip_ids: Vec<String>,
+    },
     /// Adds a lane, minting a "t" id: on top of the stack, or with
     /// `bottom` under every other lane. Absent is the top, which is what
     /// the command did before it could do anything else.
@@ -1138,9 +1150,10 @@ pub fn apply(
         | Command::ClearEffectKeys { .. }
         | Command::SetClipSpeedCurve { .. }
         | Command::SetClipTransform { .. }) => properties::apply(project, mint, command),
-        command @ (Command::DetachAudio { .. } | Command::ReattachAudio { .. }) => {
-            audio::apply(project, mint, command)
-        }
+        command @ (Command::DetachAudio { .. }
+        | Command::ReattachAudio { .. }
+        | Command::DetachAudioLinked { .. }) => audio::apply(project, mint, command),
+        command @ Command::Unlink { .. } => links::apply(project, mint, command),
         command @ (Command::AddTrack { .. }
         | Command::RemoveTrack { .. }
         | Command::SetTrackFlag { .. }) => tracks::apply(project, mint, command),

@@ -291,6 +291,7 @@ pub(super) fn apply(
         Command::SplitClips { clip_ids, time } => {
             let timeline = project.active_mut();
             let mut created = None;
+            let mut relinks = links::Relinks::default();
             for clip_id in clip_ids {
                 let Some(index) = timeline.clips.iter().position(|clip| clip.id == clip_id) else {
                     continue;
@@ -321,6 +322,7 @@ pub(super) fn apply(
                 tail.start = clip.start + offset;
                 tail.duration = clip.duration - offset;
                 tail.source_start = tail_source;
+                relinks.tail(&mut tail, time);
                 // The transition belongs to the cut at the original clip's
                 // start, which the head keeps; the way in belongs to the
                 // head and the way out to the tail, so neither piece plays
@@ -524,6 +526,7 @@ pub(super) fn apply(
             tail.start = time;
             tail.duration = clip_duration - offset;
             tail.source_start = tail_source;
+            links::Relinks::default().tail(&mut tail, time);
             tail.transition_in = None;
             tail.fade_in = 0.0;
             tail.rewindow_keys(clip_duration, offset, clip_duration);
@@ -562,6 +565,7 @@ pub(super) fn apply(
             frozen.filters = Vec::new();
             frozen.muted = None;
             frozen.detached_from = None;
+            links::set_link(&mut frozen, None);
             frozen.transition_in = None;
             frozen.text = None;
             timeline.clips.push(Arc::new(frozen));

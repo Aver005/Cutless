@@ -7,15 +7,14 @@
 //! чтобы пережить сохранение и не трогать версию документа.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
+use crate::cutless;
 use crate::placement::TOUCH;
 
 use super::*;
 
-/// Ключ объекта Cutless в `Clip::extra`.
-const CUTLESS: &str = "cutless";
-/// Ключ пометки паузы внутри объекта Cutless.
+/// Ключ пометки паузы среди полей Cutless.
 const PAUSE: &str = "pause";
 
 /// Отрезок паузы в секундах таймлайна, абсолютных.
@@ -30,41 +29,19 @@ pub struct PauseRange {
 
 /// Помечен ли клип как пауза.
 pub fn is_pause(clip: &Clip) -> bool {
-    clip.extra
-        .get(CUTLESS)
-        .and_then(|value| value.get(PAUSE))
+    cutless::get(clip, PAUSE)
         .and_then(Value::as_bool)
         .unwrap_or(false)
 }
 
 /// Ставит пометку паузы. Возвращает true, если что-то изменилось.
 fn set_pause(clip: &mut Clip) -> bool {
-    if is_pause(clip) {
-        return false;
-    }
-    let entry = clip
-        .extra
-        .entry(CUTLESS.to_owned())
-        .or_insert_with(|| Value::Object(Map::new()));
-    if !entry.is_object() {
-        *entry = Value::Object(Map::new());
-    }
-    if let Value::Object(map) = entry {
-        map.insert(PAUSE.to_owned(), Value::Bool(true));
-    }
-    true
+    cutless::set(clip, PAUSE, Value::Bool(true))
 }
 
-/// Снимает пометку паузы и чистит пустой объект Cutless.
+/// Снимает пометку паузы.
 fn clear_pause(clip: &mut Clip) -> bool {
-    let Some(Value::Object(map)) = clip.extra.get_mut(CUTLESS) else {
-        return false;
-    };
-    let removed = map.remove(PAUSE).is_some();
-    if map.is_empty() {
-        clip.extra.remove(CUTLESS);
-    }
-    removed
+    cutless::remove(clip, PAUSE)
 }
 
 /// Применяет одну из команд этого модуля. Остальные сюда не маршрутизируются.
@@ -109,15 +86,16 @@ fn mark_pauses(
     }
     let mut created = None;
     let mut applied = false;
+    let mut relinks = links::Relinks::default();
     if timeline.clip(clip_id).is_some() {
-        let (changed, last) = cut_and_mark(timeline, mint, clip_id, ranges);
+        let (changed, last) = cut_and_mark(timeline, mint, &mut relinks, clip_id, ranges);
         applied |= changed;
         if last.is_some() {
             created = last;
         }
     }
     for sound in &sounds {
-        let (changed, last) = cut_and_mark(timeline, mint, sound, ranges);
+        let (changed, last) = cut_and_mark(timeline, mint, &mut relinks, sound, ranges);
         applied |= changed;
         if last.is_some() {
             created = last;
@@ -259,6 +237,7 @@ fn confirm_pauses(
 fn cut_and_mark(
     timeline: &mut Timeline,
     mint: &mut IdMint,
+    relinks: &mut links::Relinks,
     clip_id: &str,
     ranges: &[PauseRange],
 ) -> (bool, Option<String>) {
@@ -286,7 +265,7 @@ fn cut_and_mark(
     let mut created = None;
     let mut tails = Vec::new();
     for at in &cuts {
-        if let Some(tail) = split_clip(timeline, mint, clip_id, *at) {
+        if let Some(tail) = split_clip(timeline, mint, relinks, clip_id, *at) {
             created = Some(tail.clone());
             tails.push(tail);
         }
@@ -318,6 +297,7 @@ fn cut_and_mark(
 fn split_clip(
     timeline: &mut Timeline,
     mint: &mut IdMint,
+    relinks: &mut links::Relinks,
     clip_id: &str,
     at: f64,
 ) -> Option<String> {
@@ -344,6 +324,7 @@ fn split_clip(
     tail.start = clip.start + offset;
     tail.duration = clip.duration - offset;
     tail.source_start = clip.source_start + offset * clip.speed;
+    relinks.tail(&mut tail, at);
     tail.transition_in = None;
     tail.fade_in = 0.0;
     tail.rewindow_keys(whole, offset, whole);
