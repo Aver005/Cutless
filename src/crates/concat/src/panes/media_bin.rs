@@ -200,9 +200,9 @@ impl MediaBin {
                     .map(|item| item.id.clone())
                     .collect();
                 let start = f64::from(studio.playhead.max(0.0));
-                for media_id in ids {
-                    studio.apply(Command::AddClipAtFirstFree { media_id, start });
-                }
+                // The same road a double click takes, which asks about a
+                // video with several audio tracks before it goes down.
+                studio.place_media_at_playhead(ids, start);
             }
         }
     }

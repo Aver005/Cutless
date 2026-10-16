@@ -275,6 +275,10 @@ impl SettingsPane {
             SettingsMsg::Close => self.open = false,
             SettingsMsg::RestartOnboarding => {
                 studio.prefs.onboarding_done = false;
+                // The hints come back with the introduction: a "don't ask
+                // again" that was ticked here is forgotten, so the question
+                // about a file's several audio tracks is asked once more.
+                studio.prefs.split_audio_quietly = false;
                 studio.prefs.save(&studio.host.dirs);
                 studio.notify(&t("settings.onboardingWillOpenNextLaunch"), false);
             }

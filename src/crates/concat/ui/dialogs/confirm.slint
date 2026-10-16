@@ -5,16 +5,26 @@ import { I18n } from "../i18n.slint";
 import { Theme } from "../theme/theme.slint";
 import { Glyph } from "../icons.slint";
 import { Button, Modal } from "../primitives/modal.slint";
+import { Check } from "../inspector/controls.slint";
 
-/// One question before something is thrown away: what it is, what goes
-/// with it, and the word on the button that does it. Rust fills it and
-/// says what the answer means; the sheet knows nothing of tracks or clips.
+/// One question before something is thrown away, or a choice offered
+/// before a video with several audio tracks goes down: what it is, what
+/// goes with it, and the word on the button that does it. Rust fills it
+/// and says what the answer means; the sheet knows nothing of clips.
 export struct ConfirmData {
     open: bool,
     title: string,
     message: string,
-    /// The button that goes ahead, in the danger tone: "Delete".
+    /// The button that goes ahead: "Delete".
     action: string,
+    /// The words beside the tick box, or empty for a sheet with none.
+    check-label: string,
+    /// The tick box's state. The sheet only reports a press; what is bound
+    /// back is what it draws, so the caller stays the one truth.
+    checked: bool,
+    /// True for the sheets that throw something away, which wear the bin's
+    /// mark and the warning button; false is an ordinary choice.
+    danger: bool,
 }
 
 // The confirmation sheet. Return goes ahead and Escape backs out, so a
@@ -25,10 +35,11 @@ export component ConfirmDialog inherits Modal {
 
     callback confirmed();
     callback dismissed();
+    callback check-toggled(checked: bool);
 
     open: root.data.open;
     title: root.data.title;
-    glyph: Glyph.trash;
+    glyph: root.data.danger ? Glyph.trash : Glyph.waveform;
     surface-width: 400px;
 
     closed => { root.dismissed(); }
@@ -65,6 +76,28 @@ export component ConfirmDialog inherits Modal {
                 wrap: word-wrap;
             }
 
+            if root.data.check-label != "": HorizontalLayout {
+                spacing: 8px;
+
+                VerticalLayout {
+                    alignment: center;
+
+                    Check {
+                        checked: root.data.checked;
+                        accessible-role: checkbox;
+                        accessible-label: root.data.check-label;
+                        toggled(checked) => { root.check-toggled(checked); }
+                    }
+                }
+
+                Text {
+                    text: root.data.check-label;
+                    color: Theme.fg-muted;
+                    font-size: Theme.fs;
+                    vertical-alignment: center;
+                }
+            }
+
             HorizontalLayout {
                 alignment: end;
                 spacing: 8px;
@@ -75,7 +108,7 @@ export component ConfirmDialog inherits Modal {
                 }
 
                 Button {
-                    danger: true;
+                    danger: root.data.danger;
                     label: root.data.action;
                     clicked => { root.confirmed(); }
                 }
