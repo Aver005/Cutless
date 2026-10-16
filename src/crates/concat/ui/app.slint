@@ -39,6 +39,7 @@ import { ConfirmData, ConfirmDialog } from "dialogs/confirm.slint";
 import { CaptionsDialog, CaptionsSheetData } from "dialogs/captions.slint";
 import { SpeechDialog, SpeechSheetData } from "dialogs/speech.slint";
 import { PausesDialog, PausesSheetData, PausesState, PauseMode } from "dialogs/pauses.slint";
+import { OnboardingData, OnboardingDialog } from "dialogs/onboarding.slint";
 import { DockDivider, DockSide, SeatBox } from "dock.slint";
 import { Editor } from "editor.slint";
 import { PaneKind, Panes } from "workspace/pane-switcher.slint";
@@ -75,6 +76,7 @@ export {
     TimelineTool, TrackData, TrackSize, MenuItemData, MenuRow, ExportData, ExportPhase, ModelData, SettingsData,
     ChipOption, RecentProjectData, StartData, SystemFactData, ToastData, ProjectSheetData,
     CaptionsSheetData, SpeechSheetData,
+    OnboardingData,
     ShipData, Ships,
     PausesSheetData, PausesState, PauseMode,
 }
@@ -131,7 +133,7 @@ export component App inherits Window {
     }
     property <bool> sheet-open: root.export.open || root.settings.open
         || root.project-sheet.open || root.captions.open || root.speech.open
-        || root.pauses.open || root.start.composing;
+        || root.pauses.open || root.start.composing || root.onboarding.open;
     changed sheet-open => {
         if (!root.sheet-open) {
             keys.focus();
@@ -281,6 +283,8 @@ export component App inherits Window {
     callback model-remove(id: string);
     /// Pick a model file of one's own for transcription.
     callback settings-transcriber-browse();
+    /// Forget the first-launch introduction was seen.
+    callback settings-restart-onboarding();
 
     callback open-settings();
     callback export-clicked();
@@ -346,6 +350,16 @@ export component App inherits Window {
     callback pauses-min-pause-changed(value: float);
     callback pauses-padding-changed(value: float);
     callback pauses-begin();
+
+    /// The first-launch introduction, over the launch screen.
+    in property <OnboardingData> onboarding;
+    callback onboarding-skipped();
+    callback onboarding-next();
+    callback onboarding-back();
+    callback onboarding-goal-chosen(goal: string);
+    callback onboarding-download();
+    callback onboarding-cancel();
+    callback onboarding-done();
 
     /// Takes focus back from whatever field holds it. The keyboard scope is
     /// where focus rests when nothing is being typed into, so giving it the
@@ -801,6 +815,7 @@ export component App inherits Window {
         model-cancel(id) => { root.model-cancel(id); }
         model-remove(id) => { root.model-remove(id); }
         transcriber-browse => { root.settings-transcriber-browse(); }
+        restart-onboarding => { root.settings-restart-onboarding(); }
     }
 
     in property <RelinkData> relink;
@@ -910,6 +925,22 @@ export component App inherits Window {
         min-pause-changed(value) => { root.pauses-min-pause-changed(value); }
         padding-changed(value) => { root.pauses-padding-changed(value); }
         begin => { root.pauses-begin(); }
+    }
+
+    OnboardingDialog {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        data: root.onboarding;
+
+        skipped => { root.onboarding-skipped(); }
+        next => { root.onboarding-next(); }
+        back => { root.onboarding-back(); }
+        goal-chosen(goal) => { root.onboarding-goal-chosen(goal); }
+        download => { root.onboarding-download(); }
+        cancel => { root.onboarding-cancel(); }
+        done => { root.onboarding-done(); }
     }
 
     // Over the workspace and both sheets, under the menus. A tooltip has to

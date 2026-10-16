@@ -342,6 +342,12 @@ impl StartPane {
         }
     }
 
+    /// Sets the shape a new project starts from, by the goal the
+    /// introduction picked: vertical clips are 9:16, everything else 16:9.
+    pub fn apply_goal(&mut self, goal: Option<&str>) {
+        self.aspect = crate::panes::onboarding::aspect_for_goal(goal);
+    }
+
     /// The sheet as Slint shows it.
     pub fn data(&self) -> StartData {
         let (width, height) = self.frame();

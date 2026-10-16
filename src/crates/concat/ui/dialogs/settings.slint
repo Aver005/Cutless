@@ -476,6 +476,9 @@ export component SettingsDialog inherits Modal {
     callback model-remove(id: string);
     /// Pick a model file of one's own for transcription.
     callback transcriber-browse();
+    /// Forget that the first-launch introduction was seen, so it opens on
+    /// the next start.
+    callback restart-onboarding();
 
     /// `Theme.accent-names`, each in the chosen language, in the same order.
     /// A second list rather than a lookup on the first because the string
@@ -741,6 +744,24 @@ export component SettingsDialog inherits Modal {
                         placeholder: "https://models.example.com/concat";
                         technical: true;
                         edited(text) => { root.download-base-edited(text); }
+                    }
+                }
+
+                // The first-launch introduction: it runs once, and this puts
+                // it back so it opens again on the next start.
+                DialogSection {
+                    title: I18n.t("settings.onboarding");
+                    hint: I18n.t("settings.onboardingHint");
+
+                    HorizontalLayout {
+                        alignment: start;
+
+                        Button {
+                            label: I18n.t("settings.restartOnboarding");
+                            glyph: Glyph.sparkle;
+                            ghost: true;
+                            clicked => { root.restart-onboarding(); }
+                        }
                     }
                 }
             }

@@ -783,6 +783,7 @@ pub struct Studio {
     // ── the sheets and menus ──
     pub export: crate::panes::export::ExportPane,
     pub settings: crate::panes::settings::SettingsPane,
+    pub onboarding: crate::panes::onboarding::OnboardingPane,
     pub relink: crate::panes::relink::RelinkPane,
     /// What the confirmation sheet is asking about, while it is up.
     pub confirm: Option<Confirm>,
@@ -2158,6 +2159,7 @@ impl Studio {
             monitor: crate::panes::monitor::MonitorPane::default(),
             export: Default::default(),
             settings: crate::panes::settings::SettingsPane::default(),
+            onboarding: crate::panes::onboarding::OnboardingPane::default(),
             relink: crate::panes::relink::RelinkPane::default(),
             confirm: None,
             transition_selected: None,
@@ -2230,6 +2232,9 @@ impl Studio {
         studio.handle(crate::panes::Msg::Settings(
             crate::panes::settings::SettingsMsg::Restore,
         ));
+        // The goal the introduction picked sets the shape a new project
+        // starts from, before the launch screen is first drawn.
+        studio.start.apply_goal(studio.prefs.goal.as_deref());
         // The effects shelf starts on "All", not whatever a stale default
         // would leave it on.
         studio.library[1].category = "All".to_owned();
@@ -7558,6 +7563,11 @@ impl Studio {
                 pane.update(msg, self);
                 self.settings = pane;
             }
+            crate::panes::Msg::Onboarding(msg) => {
+                let mut pane = std::mem::take(&mut self.onboarding);
+                pane.update(msg, self);
+                self.onboarding = pane;
+            }
             crate::panes::Msg::Captions(msg) => {
                 let mut pane = std::mem::take(&mut self.captions);
                 pane.update(msg, self);
@@ -9590,6 +9600,7 @@ impl Studio {
             failed: self.toast.failed,
         });
         app.set_start(self.start.data());
+        app.set_onboarding(self.onboarding.data());
         sync(
             &models.recents,
             self.recents

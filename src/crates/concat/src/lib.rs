@@ -87,6 +87,7 @@ use panes::captions::CaptionsMsg;
 use panes::export::ExportMsg;
 use panes::media_bin::MediaMsg;
 use panes::monitor::MonitorMsg;
+use panes::onboarding::OnboardingMsg;
 use panes::pauses::PausesMsg;
 use panes::project::ProjectMsg;
 use panes::relink::RelinkMsg;
@@ -1679,6 +1680,9 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     app.on_settings_transcriber_browse(on_window!(|state| {
         state.handle(Msg::Settings(SettingsMsg::BrowseModel));
     }));
+    app.on_settings_restart_onboarding(on_window!(|state| {
+        state.handle(Msg::Settings(SettingsMsg::RestartOnboarding));
+    }));
 
     // ── the tray's sound and word tools ──
     editor.on_captions(on_window!(|state| {
@@ -1783,6 +1787,29 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
     }));
     app.on_pauses_begin(on_window!(|state| {
         state.handle(Msg::Pauses(PausesMsg::Begin));
+    }));
+
+    // ── the first-launch introduction ──
+    app.on_onboarding_skipped(on_window!(|state| {
+        state.handle(Msg::Onboarding(OnboardingMsg::Done));
+    }));
+    app.on_onboarding_next(on_window!(|state| {
+        state.handle(Msg::Onboarding(OnboardingMsg::Next));
+    }));
+    app.on_onboarding_back(on_window!(|state| {
+        state.handle(Msg::Onboarding(OnboardingMsg::Back));
+    }));
+    app.on_onboarding_goal_chosen(on_window!(|state, goal: SharedString| {
+        state.handle(Msg::Onboarding(OnboardingMsg::GoalChosen(goal.to_string())));
+    }));
+    app.on_onboarding_download(on_window!(|state| {
+        state.handle(Msg::Onboarding(OnboardingMsg::Download));
+    }));
+    app.on_onboarding_cancel(on_window!(|state| {
+        state.handle(Msg::Onboarding(OnboardingMsg::Cancel));
+    }));
+    app.on_onboarding_done(on_window!(|state| {
+        state.handle(Msg::Onboarding(OnboardingMsg::Done));
     }));
 
     // ── the title-bar menus ──
@@ -2029,6 +2056,16 @@ fn start(project: Option<std::path::PathBuf>, smoke: bool) -> Result<(), slint::
             log::error!("could not open launch project: {error}");
             shell.studio.borrow_mut().notify(&error, true);
         }
+    }
+
+    // The introduction runs over the launch screen, once, until it is
+    // seen through or skipped. It is not shown when a project was opened
+    // straight from the command line.
+    if shell.studio.borrow().on_start && !shell.studio.borrow().prefs.onboarding_done {
+        shell
+            .studio
+            .borrow_mut()
+            .handle(Msg::Onboarding(OnboardingMsg::Show));
     }
 
     {

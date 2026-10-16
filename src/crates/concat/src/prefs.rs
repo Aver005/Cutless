@@ -93,6 +93,12 @@ pub struct Preferences {
     /// unless the Settings sheet was asked for more or less. CONCAT_LOG in
     /// the environment overrides it for one run.
     pub log_level: Option<String>,
+    /// The first-launch introduction has been seen through. False shows it
+    /// over the launch screen; Settings can put it back to false.
+    pub onboarding_done: bool,
+    /// The destination picked in the introduction: "vertical", "youtube" or
+    /// "edit". It picks the default shape of a new project and nothing else.
+    pub goal: Option<String>,
 }
 
 impl Preferences {
@@ -357,5 +363,28 @@ mod tests {
         let older: Preferences = serde_json::from_str(r#"{"dark": true}"#).unwrap();
         assert_eq!(older.ui_scale, None);
         assert_eq!(older.scale_index(), 0);
+    }
+
+    /// A file from before the introduction existed reads as not done, so
+    /// the introduction is shown rather than skipped, and the goal round
+    /// trips under its own name.
+    #[test]
+    fn onboarding_and_goal_round_trip() {
+        assert!(!Preferences::default().onboarding_done);
+        assert_eq!(Preferences::default().goal, None);
+        let prefs = Preferences {
+            onboarding_done: true,
+            goal: Some("vertical".to_owned()),
+            ..Preferences::default()
+        };
+        let text = serde_json::to_string(&prefs).unwrap();
+        assert!(text.contains("\"onboardingDone\":true"), "{text}");
+        assert!(text.contains("\"goal\":\"vertical\""), "{text}");
+        let back: Preferences = serde_json::from_str(&text).unwrap();
+        assert!(back.onboarding_done);
+        assert_eq!(back.goal.as_deref(), Some("vertical"));
+        let older: Preferences = serde_json::from_str(r#"{"dark": true}"#).unwrap();
+        assert!(!older.onboarding_done);
+        assert_eq!(older.goal, None);
     }
 }

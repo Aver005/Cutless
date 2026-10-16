@@ -37,6 +37,8 @@ pub enum SettingsMsg {
     Open,
     Close,
     PageChanged(i32),
+    /// Forget that the introduction was seen, so it opens on the next launch.
+    RestartOnboarding,
     /// Show this run's log in the file manager.
     ShowLog,
     LanguageChanged(i32),
@@ -268,6 +270,11 @@ impl SettingsPane {
                 self.open = true;
             }
             SettingsMsg::Close => self.open = false,
+            SettingsMsg::RestartOnboarding => {
+                studio.prefs.onboarding_done = false;
+                studio.prefs.save(&studio.host.dirs);
+                studio.notify(&t("settings.onboardingWillOpenNextLaunch"), false);
+            }
             SettingsMsg::PageChanged(index) => {
                 self.tab = index;
                 // The Version page looks for the releases the first time it
