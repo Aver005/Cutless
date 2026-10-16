@@ -9,6 +9,9 @@ import { IconButton } from "../primitives/panel.slint";
 import { Tip } from "../primitives/tooltip.slint";
 import { NumberField } from "../primitives/number-field.slint";
 import { Select } from "../primitives/select.slint";
+import { SegmentedControl } from "../primitives/segmented-control.slint";
+import { PauseMode } from "../dialogs/pauses.slint";
+import { Editor } from "../editor.slint";
 import { Pane, PaneHeader } from "pane.slint";
 import { PaneKind, PaneSwitcher } from "pane-switcher.slint";
 import { ClipKind, StageGuideData, StageItemData } from "../timeline/model.slint";
@@ -1124,6 +1127,17 @@ export component PreviewPane inherits Rectangle {
                     horizontal-stretch: 1;
                     spacing: 6px;
                     alignment: end;
+
+                    // The playback mode: the cut as it stands, or the cut with
+                    // the pauses marked on the timeline stepped over.
+                    VerticalLayout {
+                        alignment: center;
+                        SegmentedControl {
+                            options: [I18n.t("pauses.original"), I18n.t("pauses.withoutPauses")];
+                            current: PauseMode.skip ? 1 : 0;
+                            changed(index) => { Editor.shortcut("pause-mode"); }
+                        }
+                    }
 
                     VerticalLayout {
                         alignment: center;

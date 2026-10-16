@@ -19,6 +19,7 @@ pub mod export;
 pub mod media_bin;
 pub mod monitor;
 pub mod pace;
+pub mod pauses;
 pub mod project;
 pub mod relink;
 pub mod settings;
@@ -36,6 +37,8 @@ pub enum Msg {
     Settings(settings::SettingsMsg),
     /// To the captions sheet.
     Captions(captions::CaptionsMsg),
+    /// To the pauses sheet.
+    Pauses(pauses::PausesMsg),
     /// To the speech sheet.
     Speech(speech::SpeechMsg),
     /// To the missing media dialog.
@@ -67,6 +70,7 @@ pub fn activity(msg: &Msg) -> Option<Activity> {
     use log::Level::{Debug, Info};
     use media_bin::MediaMsg;
     use monitor::MonitorMsg;
+    use pauses::PausesMsg;
     use relink::RelinkMsg;
     use settings::SettingsMsg;
     use speech::SpeechMsg;
@@ -123,6 +127,16 @@ pub fn activity(msg: &Msg) -> Option<Activity> {
                     Err(error) => format!("speech: failed, {error}"),
                 },
             ));
+        }
+        Msg::Pauses(PausesMsg::Begin) => {
+            return Some(Activity::once(Info, "pauses: started".to_owned()));
+        }
+        Msg::Pauses(PausesMsg::Finished(Ok(groups))) => {
+            let marked: usize = groups.iter().map(|group| group.ranges.len()).sum();
+            return Some(Activity::once(Info, format!("pauses: marked {marked}")));
+        }
+        Msg::Pauses(PausesMsg::Finished(Err(error))) => {
+            return Some(Activity::once(Info, format!("pauses: failed, {error}")));
         }
         Msg::Media(MediaMsg::Import(paths)) => {
             let names: Vec<String> = paths
@@ -181,12 +195,20 @@ pub fn activity(msg: &Msg) -> Option<Activity> {
     // with a sheet's own housekeeping; a choice made is for Normal.
     let continuous = matches!(
         inner.as_str(),
-        "Select" | "Band" | "Zoomed" | "ZoomIn" | "ZoomOut" | "ZoomToFit"
+        "Select"
+            | "Band"
+            | "Zoomed"
+            | "ZoomIn"
+            | "ZoomOut"
+            | "ZoomToFit"
+            | "ThresholdChanged"
+            | "MinPauseChanged"
+            | "PaddingChanged"
     );
     let level = match inner.as_str() {
         "Select" | "Band" | "Zoomed" | "ZoomIn" | "ZoomOut" | "ZoomToFit" | "PageChanged"
         | "Restore" | "Reset" | "Opened" | "Closed" | "SnapToggled" | "MagneticToggled"
-        | "UpdatesFetched" => Debug,
+        | "UpdatesFetched" | "ThresholdChanged" | "MinPauseChanged" | "PaddingChanged" => Debug,
         _ => Info,
     };
     Some(Activity {

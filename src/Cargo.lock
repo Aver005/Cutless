@@ -1143,6 +1143,7 @@ dependencies = [
  "concat-speech",
  "concat-text",
  "concat-vision",
+ "cutless-pauses",
  "dirs",
  "image",
  "libc",

@@ -38,6 +38,7 @@ use concat_host::{
     templates,
 };
 use concat_media::{Pyramid, jpeg};
+use concat_project::commands::pauses::is_pause;
 use concat_project::commands::{ClipMove, ClipPatch, TrackFlag, TrimEdge};
 use concat_project::model::{
     self, AppliedFilter, Clip, Project, TextAlign, TextStyle, Timeline, Track, Transition,
@@ -906,6 +907,8 @@ pub struct Studio {
     pub project_sheet: crate::panes::project::ProjectPane,
     pub captions: crate::panes::captions::CaptionsPane,
     pub speech: crate::panes::speech::SpeechPane,
+    /// The pauses sheet and the pause-removal marks on the timeline.
+    pub pauses: crate::panes::pauses::PausesPane,
     /// A file from the library lent the monitor and the speakers; see
     /// `crate::source`.
     pub source: Option<crate::source::Source>,
@@ -2155,6 +2158,7 @@ impl Studio {
             project_sheet: crate::panes::project::ProjectPane::default(),
             captions: crate::panes::captions::CaptionsPane::default(),
             speech: crate::panes::speech::SpeechPane::default(),
+            pauses: crate::panes::pauses::PausesPane::default(),
             source: None,
             meters: crate::meters::MeterFeed::default(),
             voiceover: crate::panes::voiceover::VoiceoverPane::default(),
@@ -2777,6 +2781,31 @@ impl Studio {
 
     // ── playback ──
 
+    /// Конец помеченного отрезка, в который попала позиция, когда включён
+    /// режим «без пауз»; вместе со смежными помеченными кусками.
+    fn pause_end_at(&self, at: f64) -> Option<f64> {
+        if !self.pauses.skip {
+            return None;
+        }
+        let clips = &self.timeline().clips;
+        let mut end = at;
+        let mut moved = false;
+        loop {
+            let Some(clip) = clips.iter().find(|clip| {
+                is_pause(clip) && clip.start <= end + 1e-6 && end < clip.start + clip.duration
+            }) else {
+                break;
+            };
+            let stop = clip.start + clip.duration;
+            if stop <= end + 1e-9 {
+                break;
+            }
+            end = stop;
+            moved = true;
+        }
+        moved.then_some(end)
+    }
+
     pub fn play_toggle(&mut self) {
         // The monitor's play button and Space play what it shows.
         if self.source.is_some() {
@@ -2816,7 +2845,15 @@ impl Studio {
                     {
                         let mut studio = shell.studio.borrow_mut();
                         let end = studio.duration();
-                        let position = studio.host.playback.position_now() as f32;
+                        let mut position = studio.host.playback.position_now() as f32;
+                        // The no-pause mode: a marked stretch is stepped over
+                        // rather than played. The audio clock is the truth, so
+                        // the engine is seeked and the new position taken.
+                        if let Some(skip_to) = studio.pause_end_at(f64::from(position)) {
+                            studio.host.playback.seek(skip_to);
+                            position = skip_to as f32;
+                            shown = None;
+                        }
                         let fps = studio.project().active().video.rate();
                         let frame = (f64::from(position) * fps + 1e-6).floor() as i64;
                         if position < end && shown == Some(frame) {
@@ -4346,6 +4383,15 @@ impl Studio {
             return;
         };
         if self.locked(&clip.track_id) {
+            return;
+        }
+        // A plain press on a marked pause piece puts it back: the piece is
+        // joined with its neighbours and unmarked, as the bar's Restore does
+        // for all of them.
+        if edge < 0 && !additive && is_pause(&clip) {
+            self.apply(Command::RestorePauses {
+                clip_ids: vec![id.to_owned()],
+            });
             return;
         }
         // Whatever the inspector still holds for the clip selected until
@@ -7472,6 +7518,11 @@ impl Studio {
                 pane.update(msg, self);
                 self.speech = pane;
             }
+            crate::panes::Msg::Pauses(msg) => {
+                let mut pane = std::mem::take(&mut self.pauses);
+                pane.update(msg, self);
+                self.pauses = pane;
+            }
             crate::panes::Msg::Voiceover(msg) => {
                 let mut pane = std::mem::take(&mut self.voiceover);
                 pane.update(msg, self);
@@ -7945,10 +7996,28 @@ impl Studio {
                         wave_span: wave.2,
                         has_audio: self.clip_has_sound(clip),
                         strip: self.strip_of(clip),
+                        pause: is_pause(clip),
                     }
                 })
                 .collect(),
         );
+
+        // The pauses bar and the player's no-pause mode, on globals: the
+        // tray's bar and the preview's switch are not threaded properties.
+        let marked = timeline.clips.iter().filter(|clip| {
+            is_pause(clip) && !(clip.kind == model::ClipKind::Audio && clip.detached_from.is_none())
+        });
+        let mut pause_count = 0i32;
+        let mut pause_seconds = 0.0f64;
+        for clip in marked {
+            pause_count += 1;
+            pause_seconds += clip.duration;
+        }
+        let pauses = app.global::<PausesState>();
+        pauses.set_open(pause_count > 0);
+        pauses.set_count(pause_count);
+        pauses.set_total(format!("{pause_seconds:.1}").replace('.', ",").into());
+        app.global::<PauseMode>().set_skip(self.pauses.skip);
 
         // What is under the playhead. The topmost picture wins, the way the
         // compositor stacks them.
@@ -9614,6 +9683,7 @@ impl Studio {
                 .collect(),
         );
         app.set_captions(self.captions.data(self));
+        app.set_pauses(self.pauses.data(self));
         let voices = installed(&self.settings.voices);
         sync(
             &models.speech_models,
@@ -10402,6 +10472,34 @@ impl Studio {
             "paste" => {
                 let after = self.sole_selection();
                 self.paste_clips(after.as_deref());
+            }
+            // The pauses sheet, and the bar and switch that open it or act on
+            // what it marked.
+            "pauses" => self.handle(crate::panes::Msg::Pauses(
+                crate::panes::pauses::PausesMsg::Open,
+            )),
+            "pause-mode" => self.pauses.skip = !self.pauses.skip,
+            "pauses-close" => self.handle(crate::panes::Msg::Pauses(
+                crate::panes::pauses::PausesMsg::Close,
+            )),
+            "pauses-confirm" => {
+                self.apply(Command::ConfirmPauses { clip_ids: None });
+            }
+            "pauses-restore" => {
+                let ids: Vec<String> = self
+                    .timeline()
+                    .clips
+                    .iter()
+                    .filter(|clip| {
+                        is_pause(clip)
+                            && !(clip.kind == model::ClipKind::Audio
+                                && clip.detached_from.is_none())
+                    })
+                    .map(|clip| clip.id.clone())
+                    .collect();
+                if !ids.is_empty() {
+                    self.apply(Command::RestorePauses { clip_ids: ids });
+                }
             }
             _ => {}
         }
